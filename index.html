@@ -566,6 +566,9 @@
     if (G.caughtReason === "linger") {
       t.textContent = "⏰ The Dragon Heard You Hiding!";
       m.textContent = "You stayed in one spot too long and the dragon got curious. Keep moving — never linger for long!";
+    } else if (G.caughtReason === "touched") {
+      t.textContent = "🐉 You Bumped Into the Dragon!";
+      m.textContent = "Yikes — never touch a sleeping dragon! Sneak around it next time.";
     } else {
       t.textContent = "😱 The Dragon Spotted You!";
       m.textContent = "Don't worry — you got sent back to start. Hide better next time!";
@@ -769,6 +772,31 @@
       }
       d.alertness = Math.max(0, Math.min(100, d.alertness));
 
+      // Touch check — bumping into the dragon = caught
+      if (!d.spotted) {
+        const tdx = G.knightX - d.x;
+        const tdy = G.knightY - d.y;
+        const touchR = 52 * d.scale;
+        if (Math.hypot(tdx, tdy) < touchR) {
+          if (G.knightHasShield) {
+            G.knightHasShield = false;
+            const ang = Math.atan2(tdy, tdx) || Math.PI;
+            G.knightX = d.x + Math.cos(ang) * (touchR + 14);
+            G.knightY = d.y + Math.sin(ang) * (touchR + 14);
+            G.knightX = Math.max(20, Math.min(W - 20, G.knightX));
+            G.knightY = Math.max(40, Math.min(H - 30, G.knightY));
+            d.alertness = 60;
+            playSnore();
+          } else {
+            d.spotted = true;
+            d.spottedTimer = 60;
+            d.alertness = 100;
+            playRoar();
+            G.caughtReason = "touched";
+          }
+        }
+      }
+
       if (d.alertness >= 100 && !d.spotted) {
         if (G.knightHasShield) {
           G.knightHasShield = false;
@@ -800,7 +828,7 @@
     // Caught (after one finished its roar)
     for (const d of G.dragons) {
       if (d.spotted && d.spottedTimer <= 0) {
-        G.caughtReason = "spotted";
+        if (G.caughtReason !== "touched") G.caughtReason = "spotted";
         showScreen("caught");
         return;
       }
