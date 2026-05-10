@@ -149,7 +149,7 @@
 
   <div id="screen-win" class="screen hidden">
     <h1>👑 You Saved the Princess! 💖</h1>
-    <div class="subtitle">You beat all 5 levels and defeated every dragon's watch! The kingdom is safe and Aria is the bravest hero of all. 🏆</div>
+    <div class="subtitle">It turns out the dragon was just lonely all along! You, the princess, your trusty pet, and the dragon are now best friends forever. The kingdom is safe — and Aria is the bravest, kindest hero of all. 🐉💖👸⚔️🐾</div>
     <button class="go" id="win-again">Play Again ▶</button>
   </div>
 
@@ -633,6 +633,7 @@
     G.petX = G.knightStartX - 28;
     G.petY = G.knightStartY + 14;
     G.petWalk = 0;
+    G.ending = null;
     G.knightHasShield = !!G.knight.shield;
     G.dragons.forEach(d => {
       d.x = d.startX; d.y = d.startY;
@@ -665,6 +666,164 @@
   }
 
   // ----- Update -----
+  // ----- Ending (friendship cutscene after final win) -----
+  function startEnding() {
+    const cx = W - 280;
+    const cy = H/2 + 20;
+    G.knightX = cx;
+    G.knightY = cy;
+    G.lastKnightX = cx;
+    G.lastKnightY = cy;
+    G.lingerTime = 0;
+    G.petX = cx - 30;
+    G.petY = cy + 16;
+    G.dragons.forEach((d, i) => {
+      d.x = cx + 80 + i * 90;
+      d.y = cy - 6;
+      d.scale = 1;
+      d.alertness = 0;
+      d.spotted = false;
+      d.spottedTimer = 0;
+      d.gazeAngle = Math.PI;
+      d.gazeTarget = Math.PI;
+      d.patrol = null;
+    });
+    G.ending = {
+      t: 0,
+      duration: 360,
+      hearts: [],
+      princessAlpha: 0,
+      titleAlpha: 0,
+    };
+    playVictory();
+  }
+
+  function updateEnding() {
+    const e = G.ending;
+    e.t++;
+    e.princessAlpha = Math.min(1, e.t / 70);
+    e.titleAlpha = Math.min(1, Math.max(0, (e.t - 50) / 80));
+    if (e.t % 11 === 0) {
+      e.hearts.push({
+        x: W*0.25 + Math.random() * (W*0.55),
+        y: H + 20,
+        vy: -1.2 - Math.random() * 0.8,
+        vx: (Math.random() - 0.5) * 0.4,
+        life: 150,
+        size: 14 + Math.random() * 12,
+        color: ["#ff5fa2", "#ff8ec4", "#ffd166", "#b06bff", "#ffffff"][Math.floor(Math.random()*5)],
+        wob: Math.random() * Math.PI * 2,
+      });
+    }
+    for (const h of e.hearts) {
+      h.wob += 0.08;
+      h.y += h.vy;
+      h.x += h.vx + Math.sin(h.wob) * 0.4;
+      h.life--;
+    }
+    e.hearts = e.hearts.filter(h => h.life > 0);
+    if (e.t >= e.duration) {
+      G.ending = null;
+      showScreen("win");
+    }
+  }
+
+  function drawHeartShape(cx, cy, size, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + size * 0.4);
+    ctx.bezierCurveTo(cx + size, cy - size * 0.5, cx + size * 0.6, cy - size, cx, cy - size * 0.3);
+    ctx.bezierCurveTo(cx - size * 0.6, cy - size, cx - size, cy - size * 0.5, cx, cy + size * 0.4);
+    ctx.fill();
+    ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPrincessOutside() {
+    const e = G.ending;
+    const x = W - 110, y = H/2 + 38;
+    const bob = Math.sin(G.time * 0.08) * 1.5;
+    ctx.save();
+    ctx.globalAlpha = e.princessAlpha;
+    ctx.translate(x, y + bob);
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath(); ctx.ellipse(0, 22, 16, 4, 0, 0, Math.PI*2); ctx.fill();
+    // gown
+    ctx.fillStyle = "#ff8ec4";
+    ctx.beginPath();
+    ctx.moveTo(-12, 0); ctx.lineTo(-18, 22);
+    ctx.lineTo(18, 22); ctx.lineTo(12, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#ffd166";
+    ctx.fillRect(-12, -2, 24, 5);
+    // arms
+    ctx.fillStyle = "#ff8ec4";
+    ctx.fillRect(-16, 2, 5, 12);
+    ctx.fillRect(11, 2, 5, 12);
+    // hands
+    ctx.fillStyle = "#ffd6b3";
+    ctx.beginPath(); ctx.arc(-13.5, 14, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(13.5, 14, 3, 0, Math.PI*2); ctx.fill();
+    // head
+    ctx.fillStyle = "#ffd6b3";
+    ctx.beginPath(); ctx.arc(0, -10, 9, 0, Math.PI*2); ctx.fill();
+    // hair
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(0, -14, 10, Math.PI, 0); ctx.fill();
+    ctx.beginPath(); ctx.arc(-9, -8, 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(9, -8, 4, 0, Math.PI*2); ctx.fill();
+    // crown
+    ctx.fillStyle = "#ffcf3f";
+    ctx.beginPath();
+    ctx.moveTo(-7, -16); ctx.lineTo(-5, -22); ctx.lineTo(-2, -17);
+    ctx.lineTo(0, -23); ctx.lineTo(2, -17); ctx.lineTo(5, -22);
+    ctx.lineTo(7, -16); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#c08a00"; ctx.lineWidth = 1; ctx.stroke();
+    // happy face
+    ctx.fillStyle = "#222";
+    ctx.beginPath(); ctx.arc(-3, -10, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -10, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#aa3377"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, -7, 3, 0.1, Math.PI - 0.1); ctx.stroke();
+    // blush
+    ctx.fillStyle = "rgba(255, 130, 180, 0.5)";
+    ctx.beginPath(); ctx.arc(-5, -7, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -7, 2, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawEndingOverlay() {
+    const e = G.ending;
+    drawPrincessOutside();
+    for (const h of e.hearts) {
+      drawHeartShape(h.x, h.y, h.size, h.color, Math.min(1, h.life / 80));
+    }
+    if (e.titleAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = e.titleAlpha;
+      ctx.textAlign = "center";
+      ctx.lineJoin = "round";
+      ctx.font = "bold clamp(36px, 6vw, 60px) 'Comic Sans MS', sans-serif";
+      const txt = "Friends Forever! 💖";
+      ctx.font = "bold 56px 'Comic Sans MS', sans-serif";
+      ctx.strokeStyle = "white"; ctx.lineWidth = 8;
+      ctx.strokeText(txt, W/2, 90);
+      ctx.fillStyle = "#aa3377";
+      ctx.fillText(txt, W/2, 90);
+      ctx.font = "bold 22px 'Comic Sans MS', sans-serif";
+      const sub = "The dragon was just lonely all along.";
+      ctx.strokeStyle = "white"; ctx.lineWidth = 5;
+      ctx.strokeText(sub, W/2, 130);
+      ctx.fillStyle = "#6a3a8a";
+      ctx.fillText(sub, W/2, 130);
+      ctx.textAlign = "left";
+      ctx.restore();
+    }
+  }
+
   // ----- Carry (dragon swoops, grabs, flies knight back to start) -----
   function startCarry(d) {
     if (G.carry) return;
@@ -730,6 +889,7 @@
     G.princessBob += 0.05;
     if (G.scene !== "play") return;
 
+    if (G.ending) { updateEnding(); return; }
     if (G.carry) { updateCarry(); return; }
 
     // Knight movement
@@ -902,8 +1062,7 @@
     if (Math.hypot(G.knightX - doorX, G.knightY - doorY) < 40) {
       playSparkle();
       if (G.levelIdx + 1 >= LEVELS.length) {
-        playVictory();
-        showScreen("win");
+        startEnding();
       } else {
         document.getElementById("cleared-msg").textContent =
           `You cleared "${LEVELS[G.levelIdx].name}"! Ready for the next?`;
@@ -1120,7 +1279,22 @@
     ctx.fillStyle = c.spike;
     ctx.beginPath(); ctx.moveTo(8, -18); ctx.lineTo(14, -34); ctx.lineTo(18, -18); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-2, -20); ctx.lineTo(2, -32); ctx.lineTo(8, -20); ctx.closePath(); ctx.fill();
-    if (sleeping) {
+    if (G.ending) {
+      // Friendly happy face during ending cutscene
+      ctx.strokeStyle = "#222"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-12, -2); ctx.quadraticCurveTo(-6, -10, 0, -2); ctx.stroke();
+      // big smile
+      ctx.strokeStyle = "#3a1a1a"; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(-22, 10, 8, 0.15, Math.PI - 0.15); ctx.stroke();
+      // blush
+      ctx.fillStyle = "rgba(255, 130, 180, 0.55)";
+      ctx.beginPath(); ctx.arc(-14, 8, 4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(8, 6, 4, 0, Math.PI*2); ctx.fill();
+      // little floating heart
+      ctx.fillStyle = "#ff5fa2";
+      ctx.font = "bold 18px 'Comic Sans MS', sans-serif";
+      ctx.fillText("♥", 6, -22);
+    } else if (sleeping) {
       ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(-12, -4); ctx.quadraticCurveTo(-6, 0, 0, -4); ctx.stroke();
     } else {
@@ -1134,7 +1308,7 @@
         ctx.beginPath(); ctx.moveTo(-14, -12); ctx.lineTo(-2, -8); ctx.stroke();
       }
     }
-    if (d.spotted) {
+    if (d.spotted && !G.ending) {
       ctx.fillStyle = "#3a1a1a";
       ctx.beginPath(); ctx.ellipse(-22, 12, 10, 5, 0, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = "white";
@@ -1404,13 +1578,14 @@
   function render() {
     drawGrass();
     drawCastle();
-    drawHidingSpots();
+    if (!G.ending) drawHidingSpots();
     G.dragons.forEach(drawDragon);
     drawZs();
     drawPet();
     drawKnight();
     drawSpottedFlash();
-    drawHelpText();
+    if (G.ending) drawEndingOverlay();
+    else drawHelpText();
   }
 
   function loop() {
