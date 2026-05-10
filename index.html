@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Save the Princess! 🏰💖</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    font-family: "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif;
+    background: linear-gradient(180deg, #ffd1ec 0%, #c5e8ff 50%, #ffe9b3 100%);
+    color: #4a2c5f;
+    user-select: none;
+  }
+  #wrap { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+  canvas {
+    background: linear-gradient(180deg, #b6e3ff 0%, #d8f5c0 60%, #f5e0a3 100%);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    max-width: 100%; max-height: 100%;
+    touch-action: none;
+  }
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(255, 240, 250, 0.92);
+    backdrop-filter: blur(4px);
+    text-align: center; padding: 24px; z-index: 10;
+  }
+  .hidden { display: none !important; }
+  h1 {
+    font-size: clamp(28px, 5vw, 56px);
+    margin: 0 0 8px;
+    color: #aa3377;
+    text-shadow: 2px 2px 0 #fff, 4px 4px 0 rgba(170,51,119,0.2);
+  }
+  h2 { font-size: clamp(20px, 3vw, 32px); margin: 14px 0 18px; color: #6a3a8a; }
+  .subtitle { font-size: clamp(14px, 2vw, 20px); margin: 4px 0 18px; max-width: 700px; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 12px 0; }
+  .card {
+    background: white; border: 4px solid #ffb3d9; border-radius: 18px;
+    padding: 14px 18px; min-width: 120px; cursor: pointer;
+    box-shadow: 0 4px 0 #ff8ec4;
+    transition: transform 0.08s, box-shadow 0.08s, border-color 0.1s;
+    font-weight: bold; font-size: 18px; color: #4a2c5f;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .card.selected { border-color: #ff4f8b; background: #fff1f8; }
+  .card .swatch { display: inline-block; width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; margin-right: 8px; border: 2px solid white; box-shadow: 0 0 0 2px rgba(0,0,0,0.1); }
+  .card .emoji { font-size: 32px; display: block; margin-bottom: 4px; }
+  button.go {
+    font-family: inherit; font-size: 24px; font-weight: bold;
+    color: white; background: linear-gradient(180deg, #ff7eb9, #ff4f8b);
+    border: 4px solid white; border-radius: 999px; padding: 12px 32px;
+    cursor: pointer; box-shadow: 0 6px 0 #c2185b, 0 8px 20px rgba(0,0,0,0.2);
+    transition: transform 0.08s, box-shadow 0.08s; margin-top: 16px;
+  }
+  button.go:hover { transform: translateY(-2px); }
+  button.go:active { transform: translateY(3px); box-shadow: 0 3px 0 #c2185b; }
+  .hint { margin-top: 14px; font-size: 14px; opacity: 0.75; max-width: 600px; }
+  #hud {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 16px; align-items: center;
+    background: rgba(255,255,255,0.8); padding: 8px 18px;
+    border-radius: 999px; font-size: 18px; font-weight: bold;
+    color: #aa3377; pointer-events: none;
+  }
+  #alert-bar {
+    width: 180px; height: 14px; background: #eee;
+    border-radius: 999px; overflow: hidden; border: 2px solid white;
+  }
+  #alert-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #8aff80, #ffd166, #ff5252); transition: width 0.1s; }
+  small { display: block; font-size: 12px; opacity: 0.7; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="600"></canvas>
+
+  <div id="hud" class="hidden">
+    <span>👁️ Dragon</span>
+    <div id="alert-bar"><div id="alert-fill"></div></div>
+    <span id="status">😴 Sleeping</span>
+  </div>
+
+  <!-- Mode select -->
+  <div id="screen-mode" class="screen">
+    <h1>🏰 Save the Princess! 💖</h1>
+    <div class="subtitle">A sleeping dragon guards the castle. Sneak past it to rescue the princess — and hide when it stirs!</div>
+    <h2>How many players?</h2>
+    <div class="row">
+      <div class="card" data-mode="1p"><span class="emoji">🧍</span>1 Player<small>You sneak past a sleepy dragon</small></div>
+      <div class="card" data-mode="2p"><span class="emoji">🧍🧍</span>2 Players<small>P1 looks around as the dragon · P2 sneaks as the knight</small></div>
+    </div>
+  </div>
+
+  <!-- Dragon select -->
+  <div id="screen-dragon" class="screen hidden">
+    <h1>Player 1: Pick your Dragon 🐉</h1>
+    <div class="subtitle">Choose a color for the dragon guarding the castle.</div>
+    <div class="row" id="dragon-colors"></div>
+    <button class="go" id="dragon-next">Next ▶</button>
+  </div>
+
+  <!-- Knight select -->
+  <div id="screen-knight" class="screen hidden">
+    <h1>Player 2: Pick your Knight ⚔️</h1>
+    <div class="subtitle">Choose your hero who will save the princess.</div>
+    <div class="row" id="knight-types"></div>
+    <button class="go" id="knight-start">Start Adventure! ▶</button>
+  </div>
+
+  <!-- Win -->
+  <div id="screen-win" class="screen hidden">
+    <h1>🎉 You Saved the Princess! 💖</h1>
+    <div class="subtitle">The kingdom is safe and there is much rejoicing!</div>
+    <button class="go" id="win-again">Play Again ▶</button>
+  </div>
+
+  <!-- Caught -->
+  <div id="screen-caught" class="screen hidden">
+    <h1>😱 The Dragon Spotted You!</h1>
+    <div class="subtitle">Don't worry — you got sent back to start. Hide better next time!</div>
+    <button class="go" id="caught-retry">Try Again ▶</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  function fitCanvas() {
+    const wrap = document.getElementById("wrap");
+    const ratio = W / H;
+    let w = wrap.clientWidth - 24;
+    let h = wrap.clientHeight - 24;
+    if (w / h > ratio) w = h * ratio; else h = w / ratio;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+  }
+  window.addEventListener("resize", fitCanvas);
+  fitCanvas();
+
+  // ----- Audio -----
+  let audioCtx = null;
+  function initAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
+    }
+  }
+  function playRoar() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.6);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.75);
+  }
+  function playSnore() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.linearRampToValueAtTime(70, t + 0.5);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.06, t + 0.2);
+    g.gain.linearRampToValueAtTime(0.0001, t + 0.6);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.65);
+  }
+  function playSparkle() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    [880, 1320, 1760].forEach((f, i) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = "triangle";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + i * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.15, t + i * 0.08 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.08 + 0.25);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t + i * 0.08); o.stop(t + i * 0.08 + 0.3);
+    });
+  }
+
+  // ----- Game data -----
+  const DRAGON_COLORS = [
+    { id: "red",    name: "Ruby",     body: "#ff5d6c", belly: "#ffc1c8", spike: "#b00020" },
+    { id: "green",  name: "Emerald",  body: "#5dd88c", belly: "#cdf5d4", spike: "#2e7d32" },
+    { id: "blue",   name: "Sapphire", body: "#5db1ff", belly: "#cfe6ff", spike: "#1565c0" },
+    { id: "purple", name: "Amethyst", body: "#b06bff", belly: "#e3ccff", spike: "#5e35b1" },
+    { id: "pink",   name: "Rosie",    body: "#ff8ec4", belly: "#ffd6ec", spike: "#c2185b" },
+    { id: "gold",   name: "Sunny",    body: "#ffcc33", belly: "#fff0b3", spike: "#c08a00" },
+  ];
+
+  const KNIGHTS = [
+    { id: "sword",  name: "Sword Knight",  emoji: "⚔️", color: "#5db1ff", desc: "Balanced", speed: 2.6, shield: false },
+    { id: "shield", name: "Shield Knight", emoji: "🛡️", color: "#9a8c98", desc: "Slow but blocks 1 spot",  speed: 2.0, shield: true  },
+    { id: "archer", name: "Archer",        emoji: "🏹", color: "#88c057", desc: "Fast and sneaky", speed: 3.2, shield: false },
+  ];
+
+  const G = {
+    scene: "mode",
+    mode: "1p",
+    dragon: DRAGON_COLORS[1],
+    knight: KNIGHTS[0],
+    knightHasShield: false,
+
+    // entities
+    knightX: 60, knightY: H/2,
+    knightStartX: 60, knightStartY: H/2,
+    knightDir: 0, // facing angle for drawing
+    knightWalk: 0,
+
+    dragonX: W - 220, dragonY: H/2 + 20,
+    dragonGazeAngle: Math.PI, // facing left
+    gazeTarget: Math.PI,
+    alertness: 0, // 0..100
+    spotted: false,
+    spottedTimer: 0,
+    snoreTimer: 0,
+    z: 0,
+
+    hidingSpots: [],
+    princessBob: 0,
+    flowerSparkle: 0,
+    time: 0,
+  };
+
+  // ----- Hiding spots layout -----
+  function buildSpots() {
+    const spots = [];
+    const make = (x, y, type, r) => spots.push({ x, y, type, r });
+    // Trees, rocks, bushes scattered between knight start and castle
+    make(180, 140, "tree", 36);
+    make(260, 380, "bush", 32);
+    make(340, 220, "rock", 30);
+    make(420, 470, "tree", 40);
+    make(500, 160, "bush", 30);
+    make(560, 340, "rock", 34);
+    make(620, 500, "tree", 36);
+    make(680, 240, "bush", 30);
+    make(420, 310, "rock", 28);
+    make(300, 80,  "bush", 28);
+    G.hidingSpots = spots;
+  }
+  buildSpots();
+
+  // ----- Input -----
+  const keys = {};
+  window.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+    if (["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key.toLowerCase())) e.preventDefault();
+    initAudio();
+  });
+  window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+  // Touch / click to move (knight walks toward tap)
+  let tapTarget = null;
+  canvas.addEventListener("pointerdown", e => {
+    initAudio();
+    if (G.scene !== "play") return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (W / rect.width);
+    const y = (e.clientY - rect.top) * (H / rect.height);
+    tapTarget = { x, y };
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (G.scene !== "play" || !tapTarget) return;
+    if (e.buttons === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    tapTarget.x = (e.clientX - rect.left) * (W / rect.width);
+    tapTarget.y = (e.clientY - rect.top) * (H / rect.height);
+  });
+  canvas.addEventListener("pointerup", () => { tapTarget = null; });
+
+  // ----- Screens -----
+  const scrMode    = document.getElementById("screen-mode");
+  const scrDragon  = document.getElementById("screen-dragon");
+  const scrKnight  = document.getElementById("screen-knight");
+  const scrWin     = document.getElementById("screen-win");
+  const scrCaught  = document.getElementById("screen-caught");
+  const hud        = document.getElementById("hud");
+  const alertFill  = document.getElementById("alert-fill");
+  const statusEl   = document.getElementById("status");
+
+  function showScreen(name) {
+    [scrMode, scrDragon, scrKnight, scrWin, scrCaught].forEach(s => s.classList.add("hidden"));
+    if (name === "mode") scrMode.classList.remove("hidden");
+    if (name === "dragon") scrDragon.classList.remove("hidden");
+    if (name === "knight") scrKnight.classList.remove("hidden");
+    if (name === "win") scrWin.classList.remove("hidden");
+    if (name === "caught") scrCaught.classList.remove("hidden");
+    hud.classList.toggle("hidden", name !== "play");
+    G.scene = name;
+  }
+
+  // Mode buttons
+  scrMode.querySelectorAll(".card").forEach(c => {
+    c.addEventListener("click", () => {
+      G.mode = c.dataset.mode;
+      showScreen("dragon");
+    });
+  });
+
+  // Dragon color cards
+  const dragonRow = document.getElementById("dragon-colors");
+  DRAGON_COLORS.forEach((d, i) => {
+    const card = document.createElement("div");
+    card.className = "card" + (i === 1 ? " selected" : "");
+    card.innerHTML = `<span class="swatch" style="background:${d.body}"></span>${d.name}`;
+    card.addEventListener("click", () => {
+      dragonRow.querySelectorAll(".card").forEach(x => x.classList.remove("selected"));
+      card.classList.add("selected");
+      G.dragon = d;
+    });
+    dragonRow.appendChild(card);
+  });
+  document.getElementById("dragon-next").addEventListener("click", () => showScreen("knight"));
+
+  // Knight cards
+  const knightRow = document.getElementById("knight-types");
+  KNIGHTS.forEach((k, i) => {
+    const card = document.createElement("div");
+    card.className = "card" + (i === 0 ? " selected" : "");
+    card.innerHTML = `<span class="emoji">${k.emoji}</span>${k.name}<small>${k.desc}</small>`;
+    card.addEventListener("click", () => {
+      knightRow.querySelectorAll(".card").forEach(x => x.classList.remove("selected"));
+      card.classList.add("selected");
+      G.knight = k;
+    });
+    knightRow.appendChild(card);
+  });
+  document.getElementById("knight-start").addEventListener("click", () => startGame());
+  document.getElementById("win-again").addEventListener("click", () => showScreen("mode"));
+  document.getElementById("caught-retry").addEventListener("click", () => { resetPositions(); showScreen("play"); });
+
+  function resetPositions() {
+    G.knightX = G.knightStartX;
+    G.knightY = G.knightStartY;
+    G.alertness = 0;
+    G.spotted = false;
+    G.spottedTimer = 0;
+    G.dragonGazeAngle = Math.PI;
+    G.gazeTarget = Math.PI;
+    G.knightHasShield = !!G.knight.shield;
+  }
+
+  function startGame() {
+    resetPositions();
+    showScreen("play");
+  }
+
+  // ----- Helpers -----
+  function isHidden() {
+    for (const s of G.hidingSpots) {
+      const dx = s.x - G.knightX, dy = s.y - G.knightY;
+      if (Math.hypot(dx, dy) < s.r + 4) return true;
+    }
+    return false;
+  }
+
+  function dragonSeesKnight() {
+    const dx = G.knightX - G.dragonX;
+    const dy = G.knightY - G.dragonY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 360) return { visible: false, dist };
+    if (isHidden()) return { visible: false, dist };
+    const angleTo = Math.atan2(dy, dx);
+    let diff = angleTo - G.dragonGazeAngle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const inCone = Math.abs(diff) < 0.7; // ~80° cone
+    return { visible: inCone, dist };
+  }
+
+  // ----- Update -----
+  function update() {
+    G.time++;
+    G.princessBob += 0.05;
+    G.flowerSparkle = (G.flowerSparkle + 1) % 60;
+
+    if (G.scene !== "play") return;
+
+    // Knight movement
+    let dx = 0, dy = 0;
+    if (keys["arrowleft"]) dx -= 1;
+    if (keys["arrowright"]) dx += 1;
+    if (keys["arrowup"]) dy -= 1;
+    if (keys["arrowdown"]) dy += 1;
+
+    if (tapTarget) {
+      const tx = tapTarget.x - G.knightX, ty = tapTarget.y - G.knightY;
+      const td = Math.hypot(tx, ty);
+      if (td > 6) { dx = tx / td; dy = ty / td; }
+    }
+
+    if (dx || dy) {
+      const len = Math.hypot(dx, dy) || 1;
+      const sp = G.knight.speed;
+      G.knightX += (dx / len) * sp;
+      G.knightY += (dy / len) * sp;
+      G.knightDir = Math.atan2(dy, dx);
+      G.knightWalk += 0.25;
+    }
+    G.knightX = Math.max(20, Math.min(W - 20, G.knightX));
+    G.knightY = Math.max(40, Math.min(H - 30, G.knightY));
+
+    // Dragon gaze
+    if (G.mode === "2p") {
+      let gdx = 0, gdy = 0;
+      if (keys["a"]) gdx -= 1;
+      if (keys["d"]) gdx += 1;
+      if (keys["w"]) gdy -= 1;
+      if (keys["s"]) gdy += 1;
+      if (gdx || gdy) G.gazeTarget = Math.atan2(gdy, gdx);
+    } else {
+      // AI: when alert, turn toward where it last sensed; otherwise sweep slowly
+      if (G.alertness > 25) {
+        G.gazeTarget = Math.atan2(G.knightY - G.dragonY, G.knightX - G.dragonX);
+      } else {
+        G.gazeTarget = Math.PI + Math.sin(G.time * 0.005) * 0.6;
+      }
+    }
+    // Smooth toward gaze target
+    let gdiff = G.gazeTarget - G.dragonGazeAngle;
+    while (gdiff > Math.PI) gdiff -= Math.PI * 2;
+    while (gdiff < -Math.PI) gdiff += Math.PI * 2;
+    const gazeSpeed = G.alertness > 50 ? 0.07 : 0.025;
+    G.dragonGazeAngle += gdiff * gazeSpeed;
+
+    // Vision / alertness
+    const see = dragonSeesKnight();
+    if (see.visible) {
+      // Closer = wakes up faster
+      const closeness = Math.max(0, 1 - see.dist / 360);
+      G.alertness += 0.6 + closeness * 1.4;
+    } else {
+      G.alertness -= 0.5;
+    }
+    G.alertness = Math.max(0, Math.min(100, G.alertness));
+
+    // Spotted!
+    if (G.alertness >= 100 && !G.spotted) {
+      if (G.knightHasShield) {
+        // Shield blocks once
+        G.knightHasShield = false;
+        G.alertness = 40;
+        playSnore();
+      } else {
+        G.spotted = true;
+        playRoar();
+        G.spottedTimer = 60;
+      }
+    }
+    if (G.spotted) {
+      G.spottedTimer--;
+      if (G.spottedTimer <= 0) {
+        showScreen("caught");
+      }
+      return;
+    }
+
+    // Snore z's when sleepy
+    if (G.alertness < 20) {
+      G.snoreTimer--;
+      if (G.snoreTimer <= 0) {
+        G.snoreTimer = 90 + Math.floor(Math.random() * 60);
+        playSnore();
+        spawnZ();
+      }
+    }
+
+    // Win check: reached castle door
+    const doorX = W - 90, doorY = H/2;
+    if (Math.hypot(G.knightX - doorX, G.knightY - doorY) < 40) {
+      playSparkle();
+      showScreen("win");
+    }
+
+    // HUD
+    alertFill.style.width = G.alertness + "%";
+    if (G.spotted) statusEl.textContent = "😡 Spotted!";
+    else if (G.alertness < 20) statusEl.textContent = "😴 Sleeping";
+    else if (G.alertness < 60) statusEl.textContent = "🤔 Stirring";
+    else statusEl.textContent = "👀 Watching!";
+  }
+
+  // ----- Effects -----
+  const zs = [];
+  function spawnZ() {
+    zs.push({ x: G.dragonX + 30, y: G.dragonY - 20, vy: -0.4, life: 100, alpha: 1 });
+  }
+
+  // ----- Drawing -----
+  function drawGrass() {
+    // soft striped grass + path
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#bfe7ff");
+    grad.addColorStop(0.45, "#d9f3b9");
+    grad.addColorStop(1, "#f6e4a4");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // dirt path winding
+    ctx.strokeStyle = "#e3c585";
+    ctx.lineWidth = 36;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(40, H/2);
+    ctx.bezierCurveTo(W*0.35, H*0.3, W*0.55, H*0.8, W - 110, H/2);
+    ctx.stroke();
+
+    // little flowers
+    for (let i = 0; i < 30; i++) {
+      const x = (i * 137) % W;
+      const y = ((i * 211) % (H - 80)) + 60;
+      drawFlower(x, y, ["#ff8ec4","#ffd166","#ffffff","#b06bff"][i % 4]);
+    }
+  }
+  function drawFlower(x, y, c) {
+    ctx.fillStyle = c;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a)*4, y + Math.sin(a)*4, 3, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawCastle() {
+    const cx = W - 70, cy = H/2;
+    // base
+    ctx.fillStyle = "#d9d3c7";
+    ctx.fillRect(cx - 30, cy - 100, 100, 200);
+    // crenellations
+    ctx.fillStyle = "#bfb7a8";
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(cx - 30 + i * 26, cy - 116, 18, 18);
+    }
+    // tower
+    ctx.fillStyle = "#d9d3c7";
+    ctx.fillRect(cx + 50, cy - 140, 30, 240);
+    ctx.fillStyle = "#ff5d6c";
+    ctx.beginPath();
+    ctx.moveTo(cx + 45, cy - 140);
+    ctx.lineTo(cx + 65, cy - 175);
+    ctx.lineTo(cx + 85, cy - 140);
+    ctx.closePath(); ctx.fill();
+    // flag
+    ctx.fillStyle = "#ff8ec4";
+    ctx.fillRect(cx + 64, cy - 200, 14, 10);
+    ctx.strokeStyle = "#444"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx + 65, cy - 200); ctx.lineTo(cx + 65, cy - 175); ctx.stroke();
+    // door
+    ctx.fillStyle = "#5e3b1f";
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, cy + 100);
+    ctx.lineTo(cx - 10, cy - 10);
+    ctx.quadraticCurveTo(cx + 10, cy - 35, cx + 30, cy - 10);
+    ctx.lineTo(cx + 30, cy + 100);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#3a2410"; ctx.stroke();
+    // window with princess
+    const py = cy - 70 + Math.sin(G.princessBob) * 1.5;
+    ctx.fillStyle = "#fff7ad";
+    ctx.beginPath(); ctx.arc(cx + 65, py + 30, 14, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#bfb7a8"; ctx.stroke();
+    // princess head
+    ctx.fillStyle = "#ffd6b3";
+    ctx.beginPath(); ctx.arc(cx + 65, py + 28, 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#ffd166"; // hair
+    ctx.beginPath(); ctx.arc(cx + 65, py + 24, 8, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = "#ff5fa2"; // crown
+    ctx.beginPath();
+    ctx.moveTo(cx + 60, py + 20);
+    ctx.lineTo(cx + 62, py + 16);
+    ctx.lineTo(cx + 65, py + 19);
+    ctx.lineTo(cx + 68, py + 16);
+    ctx.lineTo(cx + 70, py + 20);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawHidingSpots() {
+    for (const s of G.hidingSpots) {
+      if (s.type === "tree") {
+        ctx.fillStyle = "#6b3e1f";
+        ctx.fillRect(s.x - 5, s.y + 4, 10, 18);
+        ctx.fillStyle = "#3da55a";
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#5fc97a";
+        ctx.beginPath(); ctx.arc(s.x - s.r*0.4, s.y - s.r*0.2, s.r*0.5, 0, Math.PI*2); ctx.fill();
+      } else if (s.type === "bush") {
+        ctx.fillStyle = "#5fc97a";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y + 4, s.r * 0.9, 0, Math.PI*2);
+        ctx.arc(s.x - s.r * 0.6, s.y + 8, s.r * 0.7, 0, Math.PI*2);
+        ctx.arc(s.x + s.r * 0.6, s.y + 8, s.r * 0.7, 0, Math.PI*2);
+        ctx.fill();
+        // berries
+        ctx.fillStyle = "#ff5d6c";
+        ctx.beginPath(); ctx.arc(s.x - 4, s.y, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(s.x + 6, s.y + 2, 2, 0, Math.PI*2); ctx.fill();
+      } else if (s.type === "rock") {
+        ctx.fillStyle = "#a8a29e";
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y + 4, s.r, s.r * 0.7, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "#cfcac4";
+        ctx.beginPath();
+        ctx.ellipse(s.x - s.r*0.3, s.y - s.r*0.1, s.r * 0.5, s.r * 0.3, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawDragon() {
+    const d = G.dragon;
+    const x = G.dragonX, y = G.dragonY;
+    const breath = Math.sin(G.time * 0.04) * 2;
+    const sleeping = G.alertness < 20;
+    const stirring = G.alertness >= 20 && G.alertness < 60;
+    const angry = G.alertness >= 60 || G.spotted;
+
+    // Vision cone
+    if (!sleeping) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(G.dragonGazeAngle);
+      const reach = 360;
+      const half = 0.7;
+      const grad = ctx.createRadialGradient(0, 0, 20, 0, 0, reach);
+      const alpha = angry ? 0.35 : 0.18;
+      grad.addColorStop(0, `rgba(255, 230, 80, ${alpha})`);
+      grad.addColorStop(1, "rgba(255, 230, 80, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, reach, -half, half);
+      ctx.closePath();
+      ctx.fill();
+      // outline
+      ctx.strokeStyle = `rgba(220, 120, 30, ${alpha + 0.2})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Body
+    ctx.save();
+    ctx.translate(x, y + breath);
+
+    // Tail
+    ctx.fillStyle = d.body;
+    ctx.beginPath();
+    ctx.moveTo(40, 0);
+    ctx.quadraticCurveTo(110, -10, 120, 30);
+    ctx.quadraticCurveTo(80, 30, 40, 18);
+    ctx.fill();
+    // tail tip
+    ctx.fillStyle = d.spike;
+    ctx.beginPath();
+    ctx.moveTo(120, 30); ctx.lineTo(135, 22); ctx.lineTo(125, 40); ctx.closePath(); ctx.fill();
+
+    // Body big oval
+    ctx.fillStyle = d.body;
+    ctx.beginPath(); ctx.ellipse(0, 0, 60, 40, 0, 0, Math.PI*2); ctx.fill();
+    // Belly
+    ctx.fillStyle = d.belly;
+    ctx.beginPath(); ctx.ellipse(-5, 12, 42, 22, 0, 0, Math.PI*2); ctx.fill();
+
+    // Wings (folded)
+    ctx.fillStyle = d.spike;
+    ctx.beginPath();
+    ctx.ellipse(-10, -22, 30, 14, -0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    // Spikes
+    ctx.fillStyle = d.spike;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * 14, -38);
+      ctx.lineTo(i * 14 + 6, -52);
+      ctx.lineTo(i * 14 + 12, -38);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // Legs
+    ctx.fillStyle = d.body;
+    ctx.beginPath(); ctx.ellipse(-25, 30, 14, 10, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(20, 30, 14, 10, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = d.spike;
+    [[-31,36],[-25,38],[-19,36],[14,36],[20,38],[26,36]].forEach(([cx,cy])=>{
+      ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI*2); ctx.fill();
+    });
+
+    // Head — rotates with gaze
+    ctx.save();
+    const headAng = G.dragonGazeAngle - Math.PI; // base orientation faces left
+    ctx.translate(-50, -10);
+    ctx.rotate(headAng * 0.4); // soft head turn
+    ctx.fillStyle = d.body;
+    ctx.beginPath(); ctx.ellipse(0, 0, 28, 22, 0, 0, Math.PI*2); ctx.fill();
+    // snout
+    ctx.fillStyle = d.body;
+    ctx.beginPath(); ctx.ellipse(-22, 6, 14, 9, 0, 0, Math.PI*2); ctx.fill();
+    // nostril
+    ctx.fillStyle = d.spike;
+    ctx.beginPath(); ctx.arc(-32, 4, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-32, 8, 1.6, 0, Math.PI*2); ctx.fill();
+    // horns
+    ctx.fillStyle = d.spike;
+    ctx.beginPath(); ctx.moveTo(8, -18); ctx.lineTo(14, -34); ctx.lineTo(18, -18); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-2, -20); ctx.lineTo(2, -32); ctx.lineTo(8, -20); ctx.closePath(); ctx.fill();
+    // eye
+    if (sleeping) {
+      ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-12, -4); ctx.quadraticCurveTo(-6, 0, 0, -4); ctx.stroke();
+    } else {
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.arc(-6, -4, 6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = angry ? "#ff3d3d" : "#222";
+      const pupShift = angry ? -2 : 0;
+      ctx.beginPath(); ctx.arc(-7 + pupShift, -4, angry ? 4 : 3, 0, Math.PI*2); ctx.fill();
+      if (angry) {
+        ctx.strokeStyle = "#3a1a1a"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-14, -12); ctx.lineTo(-2, -8); ctx.stroke();
+      }
+    }
+    // mouth
+    if (G.spotted) {
+      ctx.fillStyle = "#3a1a1a";
+      ctx.beginPath(); ctx.ellipse(-22, 12, 10, 5, 0, 0, Math.PI*2); ctx.fill();
+      // teeth
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.moveTo(-28, 10); ctx.lineTo(-26, 14); ctx.lineTo(-24, 10); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-20, 10); ctx.lineTo(-18, 14); ctx.lineTo(-16, 10); ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.restore();
+
+    // Z's
+    for (const z of zs) {
+      ctx.fillStyle = `rgba(60, 60, 100, ${z.alpha})`;
+      ctx.font = "bold 22px 'Comic Sans MS', sans-serif";
+      ctx.fillText("z", z.x, z.y);
+    }
+    for (let i = zs.length - 1; i >= 0; i--) {
+      zs[i].y += zs[i].vy;
+      zs[i].life--;
+      zs[i].alpha = Math.max(0, zs[i].life / 100);
+      if (zs[i].life <= 0) zs.splice(i, 1);
+    }
+  }
+
+  function drawKnight() {
+    const x = G.knightX, y = G.knightY;
+    const k = G.knight;
+    const bob = Math.sin(G.knightWalk) * 2;
+    const hidden = isHidden();
+
+    ctx.save();
+    ctx.translate(x, y + bob);
+    if (hidden) ctx.globalAlpha = 0.55;
+
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath(); ctx.ellipse(0, 18, 14, 4, 0, 0, Math.PI*2); ctx.fill();
+
+    // legs
+    ctx.fillStyle = "#444";
+    ctx.fillRect(-7, 6, 5, 12);
+    ctx.fillRect(2, 6, 5, 12);
+
+    // body / tunic
+    ctx.fillStyle = k.color;
+    ctx.fillRect(-10, -10, 20, 18);
+    // belt
+    ctx.fillStyle = "#5e3b1f";
+    ctx.fillRect(-10, 4, 20, 3);
+
+    // head
+    ctx.fillStyle = "#ffd6b3";
+    ctx.beginPath(); ctx.arc(0, -16, 8, 0, Math.PI*2); ctx.fill();
+    // helmet
+    ctx.fillStyle = "#bfb7a8";
+    ctx.beginPath();
+    ctx.arc(0, -18, 9, Math.PI, 0);
+    ctx.lineTo(8, -14);
+    ctx.lineTo(-8, -14);
+    ctx.closePath();
+    ctx.fill();
+    // visor slit
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-5, -16, 10, 2);
+    // plume
+    ctx.fillStyle = G.knightHasShield ? "#ffd166" : k.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -27); ctx.lineTo(-3, -22); ctx.lineTo(3, -22); ctx.closePath(); ctx.fill();
+
+    // weapon by type
+    if (k.id === "sword") {
+      ctx.fillStyle = "#cfcac4";
+      ctx.fillRect(10, -14, 4, 22);
+      ctx.fillStyle = "#5e3b1f";
+      ctx.fillRect(8, 6, 8, 4);
+    } else if (k.id === "shield") {
+      if (G.knightHasShield) {
+        ctx.fillStyle = "#5db1ff";
+        ctx.beginPath();
+        ctx.moveTo(-16, -10);
+        ctx.lineTo(-6, -10);
+        ctx.lineTo(-6, 6);
+        ctx.lineTo(-11, 12);
+        ctx.lineTo(-16, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-11, -8); ctx.lineTo(-11, 8); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-16, 0); ctx.lineTo(-6, 0); ctx.stroke();
+      }
+      ctx.fillStyle = "#cfcac4";
+      ctx.fillRect(10, -10, 3, 16);
+    } else if (k.id === "archer") {
+      ctx.strokeStyle = "#5e3b1f"; ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(12, -2, 12, -Math.PI/2, Math.PI/2);
+      ctx.stroke();
+      ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(12, -14); ctx.lineTo(12, 10); ctx.stroke();
+    }
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    if (hidden) {
+      ctx.fillStyle = "rgba(50, 130, 50, 0.9)";
+      ctx.font = "bold 16px 'Comic Sans MS', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Hidden 🤫", x, y - 36);
+      ctx.textAlign = "left";
+    }
+  }
+
+  function drawSpottedFlash() {
+    if (!G.spotted) return;
+    const a = Math.sin(G.spottedTimer * 0.4) * 0.3 + 0.3;
+    ctx.fillStyle = `rgba(255, 60, 60, ${a})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "white";
+    ctx.font = "bold 64px 'Comic Sans MS', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("ROAR! 🔥", W/2, H/2);
+    ctx.textAlign = "left";
+  }
+
+  function drawHelpText() {
+    ctx.fillStyle = "rgba(74, 44, 95, 0.7)";
+    ctx.font = "14px 'Comic Sans MS', sans-serif";
+    if (G.mode === "2p") {
+      ctx.fillText("P2 Knight: arrow keys or tap   |   P1 Dragon: WASD to look around", 16, H - 14);
+    } else {
+      ctx.fillText("Knight: arrow keys or tap to move. Hide behind trees, rocks & bushes!", 16, H - 14);
+    }
+  }
+
+  function render() {
+    drawGrass();
+    drawCastle();
+    drawHidingSpots();
+    drawDragon();
+    drawKnight();
+    drawSpottedFlash();
+    drawHelpText();
+  }
+
+  function loop() {
+    update();
+    if (G.scene === "play" || G.scene === "caught" || G.scene === "win") render();
+    else { drawGrass(); drawCastle(); drawHidingSpots(); drawDragon(); }
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  showScreen("mode");
+})();
+</script>
+</body>
+</html>
