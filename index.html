@@ -741,6 +741,26 @@
       d.gazeTarget = Math.PI;
       d.patrol = null;
     });
+    // Baby dragons join the celebration too — they're not alone anymore!
+    const parentX = cx + 80;
+    const parentY = cy - 6;
+    G.babies.forEach((b, i) => {
+      const angle = -Math.PI/2 + (i - (G.babies.length - 1) / 2) * 0.55;
+      const r = 56;
+      b.x = parentX + Math.cos(angle) * r;
+      b.y = parentY + Math.sin(angle) * r + 30;
+      b.startX = b.x; b.startY = b.y;
+      b.state = "wander";
+      b.facing = Math.PI;
+      b.fireTimer = 99999;
+      b.smokeT = 0;
+      b.walk = 0;
+      b.loseTimer = 0;
+      b.wanderTarget = { x: b.x, y: b.y };
+      b.wanderTimer = 99999;
+      b.bouncePhase = i * 0.7;
+    });
+    G.fireballs = [];
     G.ending = {
       t: 0,
       duration: 360,
@@ -1728,15 +1748,21 @@
 
   function drawBaby(b) {
     const x = b.x, y = b.y;
-    const bob = Math.sin(b.walk) * 1.5;
+    const happy = !!G.ending;
+    const bob = happy
+      ? Math.abs(Math.sin(G.time * 0.18 + (b.bouncePhase || 0))) * -6
+      : Math.sin(b.walk) * 1.5;
     const flip = Math.cos(b.facing) > 0 ? -1 : 1;
 
     ctx.save();
     ctx.translate(x, y + bob);
 
-    // shadow
+    // shadow (squashes when bouncing for cuteness)
+    const shadowSquish = happy ? Math.max(0.6, 1 + bob * 0.05) : 1;
     ctx.fillStyle = "rgba(0,0,0,0.18)";
-    ctx.beginPath(); ctx.ellipse(0, 14, 14, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, 14 - bob, 14 * shadowSquish, 4 * shadowSquish, 0, 0, Math.PI*2);
+    ctx.fill();
 
     ctx.scale(flip, 1);
 
@@ -1785,31 +1811,55 @@
     ctx.moveTo(-9, -10); ctx.lineTo(-7, -15); ctx.lineTo(-5, -10);
     ctx.closePath(); ctx.fill();
 
-    // big eyes
-    const eyeShift = b.state === "follow" ? -0.6 : 0;
-    ctx.fillStyle = "white";
-    ctx.beginPath(); ctx.arc(-15, -3, 3, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(-9, -3, 3, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = b.state === "follow" ? "#ff4444" : "#222";
-    ctx.beginPath(); ctx.arc(-15 + eyeShift, -3, 1.5, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(-9 + eyeShift, -3, 1.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "white";
-    ctx.beginPath(); ctx.arc(-15 + eyeShift, -3.5, 0.5, 0, Math.PI*2); ctx.fill();
-
-    // mouth + smoke puff if just fired
-    if (b.smokeT > 0) {
-      ctx.fillStyle = `rgba(80, 80, 80, ${b.smokeT / 24 * 0.6})`;
-      ctx.beginPath(); ctx.arc(-22, 1, 4, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(-25, -1, 3, 0, Math.PI*2); ctx.fill();
+    if (happy) {
+      // happy ^_^ eyes
+      ctx.strokeStyle = "#222"; ctx.lineWidth = 2; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-17, -2); ctx.quadraticCurveTo(-15, -7, -13, -2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-11, -2); ctx.quadraticCurveTo(-9, -7, -7, -2); ctx.stroke();
+      // blush
+      ctx.fillStyle = "rgba(255, 130, 180, 0.55)";
+      ctx.beginPath(); ctx.arc(-15, 2, 2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-9, 2, 2, 0, Math.PI*2); ctx.fill();
+      // big smile
+      ctx.strokeStyle = "#aa3377"; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(-12, 2, 3, 0.1, Math.PI - 0.1); ctx.stroke();
     } else {
-      ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(-16, 1, 2, 0.1, Math.PI - 0.1); ctx.stroke();
+      // big eyes
+      const eyeShift = b.state === "follow" ? -0.6 : 0;
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.arc(-15, -3, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-9, -3, 3, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = b.state === "follow" ? "#ff4444" : "#222";
+      ctx.beginPath(); ctx.arc(-15 + eyeShift, -3, 1.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-9 + eyeShift, -3, 1.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.arc(-15 + eyeShift, -3.5, 0.5, 0, Math.PI*2); ctx.fill();
+
+      // mouth + smoke puff if just fired
+      if (b.smokeT > 0) {
+        ctx.fillStyle = `rgba(80, 80, 80, ${b.smokeT / 24 * 0.6})`;
+        ctx.beginPath(); ctx.arc(-22, 1, 4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-25, -1, 3, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(-16, 1, 2, 0.1, Math.PI - 0.1); ctx.stroke();
+      }
     }
 
     ctx.restore();
 
-    // "!" if following
-    if (b.state === "follow") {
+    // celebratory little ♥ above each baby during ending
+    if (happy) {
+      const heartY = y - 22 + Math.sin(G.time * 0.1 + (b.bouncePhase || 0)) * 2;
+      ctx.fillStyle = "#ff5fa2";
+      ctx.font = "bold 14px 'Comic Sans MS', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("♥", x, heartY);
+      ctx.textAlign = "left";
+    }
+
+    // "!" if following (and not in ending)
+    if (!happy && b.state === "follow") {
       const ay = Math.sin(G.time * 0.3) * 2;
       ctx.fillStyle = "rgba(255, 60, 60, 0.95)";
       ctx.font = "bold 18px 'Comic Sans MS', sans-serif";
@@ -1968,7 +2018,7 @@
     if (!G.ending) drawLever();
     if (!G.ending) drawHidingSpots();
     G.dragons.forEach(drawDragon);
-    if (!G.ending) G.babies.forEach(drawBaby);
+    G.babies.forEach(drawBaby);
     drawZs();
     drawPet();
     drawKnight();
