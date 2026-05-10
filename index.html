@@ -74,6 +74,11 @@
   small { display: block; font-size: 12px; opacity: 0.7; }
   .level-title { font-size: clamp(22px, 3.5vw, 36px); color: #6a3a8a; margin: 6px 0; }
   .level-num { font-size: 16px; color: #aa3377; letter-spacing: 2px; text-transform: uppercase; }
+  .story-illust { font-size: clamp(54px, 11vw, 110px); line-height: 1; margin-bottom: 6px; filter: drop-shadow(2px 4px 0 rgba(170,51,119,0.18)); }
+  .story-text { font-size: clamp(15px, 2.2vw, 22px); max-width: 640px; line-height: 1.5; color: #4a2c5f; background: rgba(255,255,255,0.65); border-radius: 14px; padding: 14px 18px; margin: 8px 0 14px; }
+  .story-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  button.back { background: linear-gradient(180deg, #b6a8d6, #8c7ab8); box-shadow: 0 6px 0 #5e3f8a, 0 8px 20px rgba(0,0,0,0.2); }
+  .page-info { font-size: 13px; color: #aa3377; margin-top: 10px; opacity: 0.8; letter-spacing: 1px; }
 </style>
 </head>
 <body>
@@ -87,7 +92,18 @@
     <span id="status">😴 Sleeping</span>
   </div>
 
-  <div id="screen-mode" class="screen">
+  <div id="screen-story" class="screen">
+    <div class="story-illust" id="story-illust">🏰💖</div>
+    <h1 id="story-title">Once Upon a Time...</h1>
+    <div class="story-text" id="story-text"></div>
+    <div class="story-buttons">
+      <button class="go back" id="story-prev">◀ Back</button>
+      <button class="go" id="story-next">Next ▶</button>
+    </div>
+    <div class="page-info" id="story-pageinfo">Page 1 of 5</div>
+  </div>
+
+  <div id="screen-mode" class="screen hidden">
     <h1>🏰 Save the Princess! 💖</h1>
     <div class="subtitle">A sleeping dragon guards the castle. Sneak past it to rescue the princess — and hide when it stirs!</div>
     <h2>How many players?</h2>
@@ -400,6 +416,7 @@
   canvas.addEventListener("pointerup", () => { tapTarget = null; });
 
   // ----- Screens -----
+  const scrStory   = document.getElementById("screen-story");
   const scrMode    = document.getElementById("screen-mode");
   const scrDragon  = document.getElementById("screen-dragon");
   const scrKnight  = document.getElementById("screen-knight");
@@ -413,10 +430,11 @@
   const statusEl   = document.getElementById("status");
   const levelPill  = document.getElementById("level-pill");
 
-  const ALL_SCREENS = [scrMode, scrDragon, scrKnight, scrPet, scrLevel, scrCleared, scrWin, scrCaught];
+  const ALL_SCREENS = [scrStory, scrMode, scrDragon, scrKnight, scrPet, scrLevel, scrCleared, scrWin, scrCaught];
 
   function showScreen(name) {
     ALL_SCREENS.forEach(s => s.classList.add("hidden"));
+    if (name === "story") scrStory.classList.remove("hidden");
     if (name === "mode") scrMode.classList.remove("hidden");
     if (name === "dragon") scrDragon.classList.remove("hidden");
     if (name === "knight") scrKnight.classList.remove("hidden");
@@ -428,6 +446,59 @@
     hud.classList.toggle("hidden", name !== "play");
     G.scene = name;
   }
+
+  // ----- Story pages -----
+  const STORY_PAGES = [
+    {
+      illust: "🏰💖",
+      title: "Once Upon a Time...",
+      text: "In the sunny kingdom of Aria, there lived a kind princess who loved baking cookies, singing to the birds, and reading books in her tall castle tower.",
+    },
+    {
+      illust: "🐉💤",
+      title: "A Dragon Awakes",
+      text: "Deep in the misty mountains, a grumpy old dragon woke up from a thousand-year nap. It was hungry... and a little bit lonely... and VERY cranky.",
+    },
+    {
+      illust: "🐲💨",
+      title: "Trouble Arrives",
+      text: "The dragon spread its huge wings and flew straight to the castle. With a mighty roar it bellowed, \"I'll guard this place whether you like it or not!\"",
+    },
+    {
+      illust: "🔒👸",
+      title: "The Princess is Stuck!",
+      text: "With one swish of its tail, the dragon shut the princess inside the tallest tower. Then it curled up right in front of the door and fell fast asleep — guarding her with one eye open.",
+    },
+    {
+      illust: "⚔️🐾",
+      title: "A Hero is Needed!",
+      text: "Now only YOU can save her! Pick your dragon, your knight, and a trusty pet — then sneak across the kingdom to the castle door. But be careful: the dragon stirs at the slightest sound!",
+    },
+  ];
+  let storyIdx = 0;
+  const storyIllust = document.getElementById("story-illust");
+  const storyTitle  = document.getElementById("story-title");
+  const storyText   = document.getElementById("story-text");
+  const storyPage   = document.getElementById("story-pageinfo");
+  const storyPrev   = document.getElementById("story-prev");
+  const storyNext   = document.getElementById("story-next");
+  function renderStoryPage() {
+    const p = STORY_PAGES[storyIdx];
+    storyIllust.textContent = p.illust;
+    storyTitle.textContent  = p.title;
+    storyText.textContent   = p.text;
+    storyPage.textContent   = `Page ${storyIdx+1} of ${STORY_PAGES.length}`;
+    storyPrev.style.visibility = storyIdx === 0 ? "hidden" : "visible";
+    storyNext.textContent = (storyIdx === STORY_PAGES.length - 1) ? "Begin Your Quest! ▶" : "Next ▶";
+  }
+  storyPrev.addEventListener("click", () => {
+    if (storyIdx > 0) { storyIdx--; renderStoryPage(); }
+  });
+  storyNext.addEventListener("click", () => {
+    if (storyIdx < STORY_PAGES.length - 1) { storyIdx++; renderStoryPage(); }
+    else { showScreen("mode"); }
+  });
+  renderStoryPage();
 
   scrMode.querySelectorAll(".card").forEach(c => {
     c.addEventListener("click", () => { G.mode = c.dataset.mode; showScreen("dragon"); });
@@ -1195,7 +1266,7 @@
 
   loadLevel(0);
   loop();
-  showScreen("mode");
+  showScreen("story");
 })();
 </script>
 </body>
