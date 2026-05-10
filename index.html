@@ -665,10 +665,72 @@
   }
 
   // ----- Update -----
+  // ----- Carry (dragon swoops, grabs, flies knight back to start) -----
+  function startCarry(d) {
+    if (G.carry) return;
+    G.carry = {
+      dragon: d,
+      phase: "swoop",
+      t: 0,
+      fromX: d.x, fromY: d.y,
+      grabX: G.knightX, grabY: G.knightY,
+      startX: G.knightStartX, startY: G.knightStartY,
+      postX: d.startX, postY: d.startY,
+      swoopFrames: 50,
+      carryFrames: 90,
+      flybackFrames: 40,
+    };
+  }
+
+  function updateCarry() {
+    const c = G.carry;
+    c.t++;
+    G.dragons.forEach(dr => { if (dr.spottedTimer > 0) dr.spottedTimer--; });
+    if (c.phase === "swoop") {
+      const k = Math.min(1, c.t / c.swoopFrames);
+      const ke = k * k * (3 - 2 * k);
+      c.dragon.x = c.fromX + (c.grabX - c.fromX) * ke;
+      c.dragon.y = c.fromY + (c.grabY - c.fromY) * ke - Math.sin(k * Math.PI) * 50;
+      if (k >= 1) { c.phase = "carry"; c.t = 0; }
+    } else if (c.phase === "carry") {
+      const k = Math.min(1, c.t / c.carryFrames);
+      const ke = k * k * (3 - 2 * k);
+      const px = c.grabX + (c.startX - c.grabX) * ke;
+      const py = c.grabY + (c.startY - c.grabY) * ke - Math.sin(k * Math.PI) * 110;
+      c.dragon.x = px;
+      c.dragon.y = py;
+      G.knightX = px;
+      G.knightY = py + 34;
+      G.petWalk += 0.05;
+      if (k >= 1) { c.phase = "flyback"; c.t = 0; G.knightX = c.startX; G.knightY = c.startY; }
+    } else if (c.phase === "flyback") {
+      const k = Math.min(1, c.t / c.flybackFrames);
+      const ke = k * k * (3 - 2 * k);
+      c.dragon.x = c.startX + (c.postX - c.startX) * ke;
+      c.dragon.y = c.startY + (c.postY - c.startY) * ke - Math.sin(k * Math.PI) * 90;
+      if (k >= 1) {
+        c.dragon.x = c.postX; c.dragon.y = c.postY;
+        const finishedDragon = c.dragon;
+        G.carry = null;
+        G.dragons.forEach(dr => {
+          dr.alertness = 0;
+          dr.spotted = false;
+          dr.spottedTimer = 0;
+          if (dr.patrol) dr.patrol.idx = 0;
+          dr.x = dr.startX; dr.y = dr.startY;
+        });
+        G.lingerTime = 0;
+        showScreen("caught");
+      }
+    }
+  }
+
   function update() {
     G.time++;
     G.princessBob += 0.05;
     if (G.scene !== "play") return;
+
+    if (G.carry) { updateCarry(); return; }
 
     // Knight movement
     let dx = 0, dy = 0;
@@ -702,7 +764,12 @@
       G.lingerTime = 0;
       playRoar();
       G.caughtReason = "linger";
-      showScreen("caught");
+      let nearest = G.dragons[0], minD = Infinity;
+      for (const dr of G.dragons) {
+        const dd = Math.hypot(dr.x - G.knightX, dr.y - G.knightY);
+        if (dd < minD) { minD = dd; nearest = dr; }
+      }
+      if (nearest) startCarry(nearest);
       return;
     }
 
@@ -793,6 +860,7 @@
             d.alertness = 100;
             playRoar();
             G.caughtReason = "touched";
+            startCarry(d);
           }
         }
       }
@@ -806,6 +874,8 @@
           d.spotted = true;
           playRoar();
           d.spottedTimer = 60;
+          if (G.caughtReason !== "touched") G.caughtReason = "spotted";
+          startCarry(d);
         }
       }
       if (d.spotted) {
@@ -825,14 +895,7 @@
       maxAlert = Math.max(maxAlert, d.alertness);
     }
 
-    // Caught (after one finished its roar)
-    for (const d of G.dragons) {
-      if (d.spotted && d.spottedTimer <= 0) {
-        if (G.caughtReason !== "touched") G.caughtReason = "spotted";
-        showScreen("caught");
-        return;
-      }
-    }
+    // (spotted -> carry sequence is started where d.spotted becomes true)
 
     // Win
     const doorX = W - 90, doorY = H/2;
@@ -981,7 +1044,8 @@
     const sleeping = d.alertness < 20;
     const angry = d.alertness >= 60 || d.spotted;
 
-    if (!sleeping) {
+    const carrying = G.carry && G.carry.dragon === d;
+    if (!sleeping && !carrying) {
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(d.gazeAngle);
@@ -1314,7 +1378,7 @@
   }
 
   function drawSpottedFlash() {
-    const spottedAny = G.dragons.some(d => d.spotted);
+    const spottedAny = G.dragons.some(d => d.spotted && d.spottedTimer > 0);
     if (!spottedAny) return;
     const t = Math.max(...G.dragons.map(d => d.spottedTimer));
     const a = Math.sin(t * 0.4) * 0.3 + 0.3;
