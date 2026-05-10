@@ -108,7 +108,14 @@
     <h1>Player 2: Pick your Knight ⚔️</h1>
     <div class="subtitle">Choose your hero who will save the princess.</div>
     <div class="row" id="knight-types"></div>
-    <button class="go" id="knight-start">Start Adventure! ▶</button>
+    <button class="go" id="knight-next">Next ▶</button>
+  </div>
+
+  <div id="screen-pet" class="screen hidden">
+    <h1>Pick your Pet 🐾</h1>
+    <div class="subtitle">Every brave knight needs a furry friend tagging along!</div>
+    <div class="row" id="pet-types"></div>
+    <button class="go" id="pet-start">Start Adventure! ▶</button>
   </div>
 
   <div id="screen-level" class="screen hidden">
@@ -239,6 +246,13 @@
     { id: "archer", name: "Archer",        emoji: "🏹", color: "#88c057", desc: "Fast and sneaky", speed: 3.2, shield: false },
   ];
 
+  const PETS = [
+    { id: "puppy",  name: "Puppy",   emoji: "🐶", body: "#d4a574", spot: "#7a4f2a", desc: "Loyal and bouncy" },
+    { id: "kitten", name: "Kitten",  emoji: "🐱", body: "#f5d9a0", spot: "#a87c4f", desc: "Sneaky little pal" },
+    { id: "bunny",  name: "Bunny",   emoji: "🐰", body: "#fff5e6", spot: "#ffb3d9", desc: "Hops along behind you" },
+    { id: "fox",    name: "Fox Cub", emoji: "🦊", body: "#ff8c42", spot: "#ffffff", desc: "Clever forest friend" },
+  ];
+
   // ----- Levels -----
   // Each level has its own world width — later levels are physically longer journeys.
   // Dragon positions use xFromRight (distance from castle side) so they sit near the castle.
@@ -337,7 +351,10 @@
     mode: "1p",
     dragon: DRAGON_COLORS[1],
     knight: KNIGHTS[0],
+    pet: PETS[0],
     knightHasShield: false,
+
+    petX: 30, petY: H/2 + 16, petWalk: 0,
 
     levelIdx: 0,
     bg: LEVELS[0].bg,
@@ -386,6 +403,7 @@
   const scrMode    = document.getElementById("screen-mode");
   const scrDragon  = document.getElementById("screen-dragon");
   const scrKnight  = document.getElementById("screen-knight");
+  const scrPet     = document.getElementById("screen-pet");
   const scrLevel   = document.getElementById("screen-level");
   const scrCleared = document.getElementById("screen-cleared");
   const scrWin     = document.getElementById("screen-win");
@@ -395,13 +413,14 @@
   const statusEl   = document.getElementById("status");
   const levelPill  = document.getElementById("level-pill");
 
-  const ALL_SCREENS = [scrMode, scrDragon, scrKnight, scrLevel, scrCleared, scrWin, scrCaught];
+  const ALL_SCREENS = [scrMode, scrDragon, scrKnight, scrPet, scrLevel, scrCleared, scrWin, scrCaught];
 
   function showScreen(name) {
     ALL_SCREENS.forEach(s => s.classList.add("hidden"));
     if (name === "mode") scrMode.classList.remove("hidden");
     if (name === "dragon") scrDragon.classList.remove("hidden");
     if (name === "knight") scrKnight.classList.remove("hidden");
+    if (name === "pet") scrPet.classList.remove("hidden");
     if (name === "level") scrLevel.classList.remove("hidden");
     if (name === "cleared") scrCleared.classList.remove("hidden");
     if (name === "win") scrWin.classList.remove("hidden");
@@ -440,10 +459,25 @@
     });
     knightRow.appendChild(card);
   });
-  document.getElementById("knight-start").addEventListener("click", () => {
+  document.getElementById("knight-next").addEventListener("click", () => showScreen("pet"));
+
+  const petRow = document.getElementById("pet-types");
+  PETS.forEach((p, i) => {
+    const card = document.createElement("div");
+    card.className = "card" + (i === 0 ? " selected" : "");
+    card.innerHTML = `<span class="emoji">${p.emoji}</span>${p.name}<small>${p.desc}</small>`;
+    card.addEventListener("click", () => {
+      petRow.querySelectorAll(".card").forEach(x => x.classList.remove("selected"));
+      card.classList.add("selected");
+      G.pet = p;
+    });
+    petRow.appendChild(card);
+  });
+  document.getElementById("pet-start").addEventListener("click", () => {
     G.levelIdx = 0;
     enterLevel(0);
   });
+
   document.getElementById("level-begin").addEventListener("click", () => { showScreen("play"); });
   document.getElementById("cleared-next").addEventListener("click", () => { enterLevel(G.levelIdx + 1); });
   document.getElementById("win-again").addEventListener("click", () => showScreen("mode"));
@@ -501,6 +535,9 @@
   function resetPositions() {
     G.knightX = G.knightStartX;
     G.knightY = G.knightStartY;
+    G.petX = G.knightStartX - 28;
+    G.petY = G.knightStartY + 14;
+    G.petWalk = 0;
     G.knightHasShield = !!G.knight.shield;
     G.dragons.forEach(d => {
       d.x = d.startX; d.y = d.startY;
@@ -559,6 +596,18 @@
     }
     G.knightX = Math.max(20, Math.min(W - 20, G.knightX));
     G.knightY = Math.max(40, Math.min(H - 30, G.knightY));
+
+    // Pet follows the knight at a small offset
+    const ptX = G.knightX - 26;
+    const ptY = G.knightY + 14;
+    const ppx = ptX - G.petX, ppy = ptY - G.petY;
+    const ppd = Math.hypot(ppx, ppy);
+    if (ppd > 4) {
+      const ps = Math.min(ppd * 0.18, G.knight.speed + 0.6);
+      G.petX += (ppx / ppd) * ps;
+      G.petY += (ppy / ppd) * ps;
+      G.petWalk += 0.3;
+    }
 
     // Per-dragon update
     let anySpotted = false;
@@ -912,6 +961,124 @@
     }
   }
 
+  function drawPet() {
+    const p = G.pet;
+    const x = G.petX, y = G.petY;
+    const moving = Math.hypot(G.knightX - 26 - x, G.knightY + 14 - y) > 4;
+    const bob = moving ? Math.sin(G.petWalk) * 1.6 : Math.sin(G.time * 0.1) * 0.8;
+    const hidden = (() => {
+      for (const s of G.hidingSpots) {
+        if (Math.hypot(s.x - x, s.y - y) < s.r + 4) return true;
+      }
+      return false;
+    })();
+
+    ctx.save();
+    ctx.translate(x, y + bob);
+    if (hidden) ctx.globalAlpha = 0.55;
+
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath(); ctx.ellipse(0, 9, 11, 3, 0, 0, Math.PI*2); ctx.fill();
+
+    // tail (animates while moving)
+    const wag = moving ? Math.sin(G.petWalk * 1.4) * 4 : Math.sin(G.time * 0.08) * 2;
+    ctx.fillStyle = p.body;
+    if (p.id === "bunny") {
+      ctx.beginPath(); ctx.arc(11, -1, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.arc(11, -1, 2.2, 0, Math.PI*2); ctx.fill();
+    } else if (p.id === "fox") {
+      ctx.beginPath();
+      ctx.moveTo(7, -2);
+      ctx.quadraticCurveTo(16 + wag, -10, 18 + wag, 2);
+      ctx.quadraticCurveTo(13, 2, 7, -2);
+      ctx.fill();
+      ctx.fillStyle = p.spot;
+      ctx.beginPath(); ctx.arc(18 + wag, 0, 2.6, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(7, -2);
+      ctx.quadraticCurveTo(14 + wag, -7, 13 + wag, 3);
+      ctx.quadraticCurveTo(10, 1, 7, -2);
+      ctx.fill();
+    }
+
+    // body
+    ctx.fillStyle = p.body;
+    ctx.beginPath(); ctx.ellipse(0, 1, 11, 7, 0, 0, Math.PI*2); ctx.fill();
+    // belly
+    ctx.fillStyle = p.id === "fox" ? "#ffe9d6" : "#fff5e6";
+    ctx.beginPath(); ctx.ellipse(-1, 4, 7, 3, 0, 0, Math.PI*2); ctx.fill();
+
+    // legs (tiny)
+    ctx.fillStyle = p.body;
+    ctx.fillRect(-7, 5, 3, 4);
+    ctx.fillRect(3, 5, 3, 4);
+
+    // head
+    ctx.fillStyle = p.body;
+    ctx.beginPath(); ctx.arc(-10, -3, 6.5, 0, Math.PI*2); ctx.fill();
+
+    // ears
+    if (p.id === "puppy") {
+      ctx.fillStyle = p.spot;
+      ctx.beginPath(); ctx.ellipse(-14, -4, 3, 5, -0.4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-7, -6, 3, 5, 0.4, 0, Math.PI*2); ctx.fill();
+    } else if (p.id === "kitten") {
+      ctx.fillStyle = p.body;
+      ctx.beginPath();
+      ctx.moveTo(-14, -7); ctx.lineTo(-12, -12); ctx.lineTo(-9, -7);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-8, -7); ctx.lineTo(-6, -12); ctx.lineTo(-3, -7);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = p.spot;
+      ctx.beginPath();
+      ctx.moveTo(-13, -8); ctx.lineTo(-12, -11); ctx.lineTo(-10, -8); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-7, -8); ctx.lineTo(-6, -11); ctx.lineTo(-4, -8); ctx.closePath(); ctx.fill();
+    } else if (p.id === "bunny") {
+      ctx.fillStyle = p.body;
+      ctx.fillRect(-13, -16, 2.5, 11);
+      ctx.fillRect(-7.5, -16, 2.5, 11);
+      ctx.fillStyle = p.spot;
+      ctx.fillRect(-12.4, -14, 1.2, 7);
+      ctx.fillRect(-6.9, -14, 1.2, 7);
+    } else if (p.id === "fox") {
+      ctx.fillStyle = p.body;
+      ctx.beginPath();
+      ctx.moveTo(-14, -6); ctx.lineTo(-12, -13); ctx.lineTo(-9, -7);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-8, -7); ctx.lineTo(-6, -13); ctx.lineTo(-3, -6);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#3a1a1a";
+      ctx.beginPath();
+      ctx.moveTo(-13, -8); ctx.lineTo(-12, -11); ctx.lineTo(-11, -8); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-7, -8); ctx.lineTo(-6, -11); ctx.lineTo(-5, -8); ctx.closePath(); ctx.fill();
+    }
+
+    // eyes
+    ctx.fillStyle = "#222";
+    ctx.beginPath(); ctx.arc(-12.5, -3, 1.1, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-8.5, -3, 1.1, 0, Math.PI*2); ctx.fill();
+    // tiny shine
+    ctx.fillStyle = "white";
+    ctx.beginPath(); ctx.arc(-12.2, -3.4, 0.4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-8.2, -3.4, 0.4, 0, Math.PI*2); ctx.fill();
+
+    // nose / mouth
+    ctx.fillStyle = (p.id === "bunny") ? "#ff8ec4" : "#222";
+    ctx.beginPath(); ctx.arc(-15, -1, 1.1, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-15, 0); ctx.quadraticCurveTo(-14, 2, -13, 1); ctx.stroke();
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   function drawKnight() {
     const x = G.knightX, y = G.knightY;
     const k = G.knight;
@@ -1014,6 +1181,7 @@
     drawHidingSpots();
     G.dragons.forEach(drawDragon);
     drawZs();
+    drawPet();
     drawKnight();
     drawSpottedFlash();
     drawHelpText();
