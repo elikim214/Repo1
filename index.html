@@ -286,6 +286,7 @@
         [300,80,"bush",28],[760,440,"bush",30],
       ],
       dragons: [{ xFromRight: 200, y: H/2+20, reach: 280, cone: 0.6, wake: 0.5, decay: 0.65 }],
+      lever: { x: 600, y: 90 },
     },
     {
       name: "Whispering Woods",
@@ -302,6 +303,7 @@
       ],
       dragons: [{ xFromRight: 200, y: H/2-20, reach: 320, cone: 0.65, wake: 0.7, decay: 0.55 }],
       babies: [{ x: 600, y: 280 }],
+      lever: { x: 870, y: 90 },
     },
     {
       name: "The Pacing Peak",
@@ -321,6 +323,7 @@
         patrol: [{xFromRight:220,y:H/2-140},{xFromRight:220,y:H/2+140}], patrolSpeed: 0.7,
       }],
       babies: [{ x: 500, y: 240 }, { x: 880, y: 380 }],
+      lever: { x: 1050, y: H - 70 },
     },
     {
       name: "Twin Terror",
@@ -342,6 +345,7 @@
           colorId: "purple" },
       ],
       babies: [{ x: 480, y: 320 }, { x: 920, y: 220 }],
+      lever: { x: 1240, y: 90 },
     },
     {
       name: "Final Stand",
@@ -363,6 +367,7 @@
         patrol: [{xFromRight:220,y:H/2-100},{xFromRight:220,y:H/2+100}], patrolSpeed: 0.45,
       }],
       babies: [{ x: 450, y: 350 }, { x: 850, y: 220 }, { x: 1250, y: 420 }],
+      lever: { x: 1430, y: H - 70 },
     },
   ];
 
@@ -391,6 +396,12 @@
     babies: [],
     fireballs: [],
     hidingSpots: [],
+
+    gate: { x: 0 },
+    lever: { x: 0, y: 0, r: 30 },
+    gateOpen: false,
+    gateOpenT: 0,
+    gateSparkles: [],
 
     princessBob: 0,
     time: 0,
@@ -630,6 +641,13 @@
         snoreTimer: 0,
       };
     });
+    G.gate = { x: W - 130 };
+    G.lever = lvl.lever
+      ? { x: lvl.lever.x, y: lvl.lever.y, r: 30 }
+      : { x: W - 220, y: 90, r: 30 };
+    G.gateOpen = false;
+    G.gateOpenT = 0;
+    G.gateSparkles = [];
     G.babies = (lvl.babies || []).map(b => ({
       x: b.x, y: b.y, startX: b.x, startY: b.y,
       state: "wander",
@@ -673,6 +691,9 @@
       b.walk = 0;
     });
     G.fireballs = [];
+    G.gateOpen = false;
+    G.gateOpenT = 0;
+    G.gateSparkles = [];
     zs.length = 0;
   }
 
@@ -727,6 +748,8 @@
       princessAlpha: 0,
       titleAlpha: 0,
     };
+    G.gateOpen = true;
+    G.gateOpenT = 60;
     playVictory();
   }
 
@@ -946,6 +969,11 @@
     G.knightX = Math.max(20, Math.min(W - 20, G.knightX));
     G.knightY = Math.max(40, Math.min(H - 30, G.knightY));
 
+    // Gate blocks the knight when closed
+    if (!G.gateOpen && G.knightX > G.gate.x - 12) {
+      G.knightX = G.gate.x - 12;
+    }
+
     // Linger timer — can't camp behind one tree forever
     const moveDist = Math.hypot(G.knightX - G.lastKnightX, G.knightY - G.lastKnightY);
     if (moveDist < 0.6) G.lingerTime++;
@@ -976,6 +1004,30 @@
       G.petY += (ppy / ppd) * ps;
       G.petWalk += 0.3;
     }
+
+    // Pet activates the lever -> opens the gate
+    if (!G.gateOpen) {
+      const ldx = G.lever.x - G.petX, ldy = G.lever.y - G.petY;
+      if (Math.hypot(ldx, ldy) < G.lever.r) {
+        G.gateOpen = true;
+        G.gateOpenT = 0;
+        playSparkle();
+        for (let i = 0; i < 18; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 1 + Math.random() * 2;
+          G.gateSparkles.push({
+            x: G.gate.x, y: H/2 + (Math.random() - 0.5) * 200,
+            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 1,
+            life: 50 + Math.random() * 30,
+            color: ["#fff7ad","#ffd166","#ffb3d9","#ffffff"][i % 4],
+          });
+        }
+      }
+    }
+    if (G.gateOpen && G.gateOpenT < 60) G.gateOpenT++;
+    for (const s of G.gateSparkles) { s.x += s.vx; s.y += s.vy; s.vy += 0.05; s.life--; }
+    G.gateSparkles = G.gateSparkles.filter(s => s.life > 0);
+
 
     // Per-dragon update
     let anySpotted = false;
@@ -1571,6 +1623,109 @@
     ctx.globalAlpha = 1;
   }
 
+  function drawGate() {
+    const gx = G.gate.x;
+    const openProgress = G.gateOpen ? Math.min(1, G.gateOpenT / 60) : 0;
+    const lift = openProgress * (H - 90);
+
+    // Stone pillars (always visible) — frame the gate
+    ctx.fillStyle = "#b0a89a";
+    ctx.fillRect(gx - 22, 30, 8, H - 60);
+    ctx.fillRect(gx + 14, 30, 8, H - 60);
+    ctx.fillStyle = "#8a8275";
+    ctx.fillRect(gx - 26, 24, 16, 10);
+    ctx.fillRect(gx + 10, 24, 16, 10);
+    // pillar texture lines
+    ctx.strokeStyle = "rgba(60,40,40,0.2)"; ctx.lineWidth = 1;
+    for (let py = 60; py < H - 40; py += 24) {
+      ctx.beginPath(); ctx.moveTo(gx - 22, py); ctx.lineTo(gx - 14, py); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx + 14, py); ctx.lineTo(gx + 22, py); ctx.stroke();
+    }
+
+    // Portcullis lifts upward
+    ctx.save();
+    ctx.translate(0, -lift);
+    // top wood frame
+    ctx.fillStyle = "#5e3b1f";
+    ctx.fillRect(gx - 14, 36, 30, 8);
+    // iron bars
+    ctx.fillStyle = "#3a3a3a";
+    for (let i = 0; i < 4; i++) {
+      const bx = gx - 10 + i * 7;
+      ctx.fillRect(bx, 44, 3, H - 78);
+      // pointy tip
+      ctx.beginPath();
+      ctx.moveTo(bx, H - 34);
+      ctx.lineTo(bx + 1.5, H - 26);
+      ctx.lineTo(bx + 3, H - 34);
+      ctx.closePath(); ctx.fill();
+    }
+    // horizontal cross-bars
+    ctx.fillStyle = "#222";
+    for (let cy = 100; cy < H - 50; cy += 100) {
+      ctx.fillRect(gx - 12, cy, 26, 3);
+    }
+    ctx.restore();
+
+    // closed-state hint
+    if (!G.gateOpen) {
+      ctx.fillStyle = "rgba(170, 51, 119, 0.85)";
+      ctx.font = "bold 13px 'Comic Sans MS', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("🔒 Locked", gx, 18);
+      ctx.textAlign = "left";
+    }
+
+    // sparkles burst when gate opens
+    for (const s of G.gateSparkles) {
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = Math.min(1, s.life / 50);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 3, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawLever() {
+    const lx = G.lever.x, ly = G.lever.y, lr = G.lever.r;
+    if (G.gateOpen) {
+      ctx.fillStyle = "rgba(120, 200, 120, 0.7)";
+      ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "white";
+      ctx.font = "bold 26px 'Comic Sans MS', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("✓", lx, ly + 9);
+      ctx.textAlign = "left";
+      return;
+    }
+    const pulse = 0.7 + Math.sin(G.time * 0.12) * 0.3;
+    // soft halo
+    const grad = ctx.createRadialGradient(lx, ly, 4, lx, ly, lr + 14);
+    grad.addColorStop(0, `rgba(255, 230, 100, ${0.55 * pulse})`);
+    grad.addColorStop(1, "rgba(255, 230, 100, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(lx, ly, lr + 14, 0, Math.PI*2); ctx.fill();
+    // pad
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#aa3377"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI*2); ctx.stroke();
+    // paw print
+    ctx.fillStyle = "#5e3b1f";
+    ctx.beginPath(); ctx.ellipse(lx, ly + 5, 7, 6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(lx - 8, ly - 3, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(lx - 3, ly - 8, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(lx + 3, ly - 8, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(lx + 8, ly - 3, 3, 0, Math.PI*2); ctx.fill();
+    // hint text
+    ctx.fillStyle = "rgba(170, 51, 119, 0.95)";
+    ctx.font = "bold 13px 'Comic Sans MS', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Pet only! 🐾", lx, ly - lr - 6);
+    ctx.textAlign = "left";
+  }
+
   function drawBaby(b) {
     const x = b.x, y = b.y;
     const bob = Math.sin(b.walk) * 1.5;
@@ -1810,12 +1965,14 @@
   function render() {
     drawGrass();
     drawCastle();
+    if (!G.ending) drawLever();
     if (!G.ending) drawHidingSpots();
     G.dragons.forEach(drawDragon);
     if (!G.ending) G.babies.forEach(drawBaby);
     drawZs();
     drawPet();
     drawKnight();
+    if (!G.ending) drawGate();
     if (!G.ending) drawFireballs();
     drawSpottedFlash();
     if (G.ending) drawEndingOverlay();
