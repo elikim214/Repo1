@@ -109,7 +109,7 @@
     <h2>How many players?</h2>
     <div class="row">
       <div class="card" data-mode="1p"><span class="emoji">🧍</span>1 Player<small>You sneak past a sleepy dragon</small></div>
-      <div class="card" data-mode="2p"><span class="emoji">🧍🧍</span>2 Players<small>P1 looks around as the dragon · P2 sneaks as the knight</small></div>
+      <div class="card" data-mode="2p"><span class="emoji">🧍🧍</span>2 Players<small>Two knights team up — P1 uses arrows, P2 uses WASD</small></div>
     </div>
   </div>
 
@@ -392,6 +392,15 @@
     lingerTime: 0,
     lastKnightX: 60, lastKnightY: H/2,
 
+    // Player 2 knight (only used when mode === "2p")
+    knight2X: 60, knight2Y: H/2 + 60,
+    knight2StartX: 60, knight2StartY: H/2 + 60,
+    knight2Dir: 0, knight2Walk: 0,
+    knight2HasShield: false,
+    lingerTime2: 0,
+    lastKnight2X: 60, lastKnight2Y: H/2 + 60,
+    pet2X: 30, pet2Y: H/2 + 76, pet2Walk: 0,
+
     dragons: [],
     babies: [],
     fireballs: [],
@@ -409,6 +418,7 @@
 
   const LINGER_WARN = 90;   // ~1.5s — clock starts showing
   const LINGER_LIMIT = 240; // ~4s — caught for camping
+  const K2_COLOR = "#ff7eb9"; // pink tunic for Player 2's knight
 
   // ----- Input -----
   const keys = {};
@@ -674,6 +684,18 @@
     G.petWalk = 0;
     G.ending = null;
     G.knightHasShield = !!G.knight.shield;
+    // Knight 2 starts offset vertically so they don't overlap P1
+    G.knight2StartX = G.knightStartX;
+    G.knight2StartY = Math.min(H - 60, G.knightStartY + 80);
+    G.knight2X = G.knight2StartX;
+    G.knight2Y = G.knight2StartY;
+    G.lastKnight2X = G.knight2X;
+    G.lastKnight2Y = G.knight2Y;
+    G.lingerTime2 = 0;
+    G.pet2X = G.knight2StartX - 28;
+    G.pet2Y = G.knight2StartY + 14;
+    G.pet2Walk = 0;
+    G.knight2HasShield = !!G.knight.shield;
     G.dragons.forEach(d => {
       d.x = d.startX; d.y = d.startY;
       d.alertness = 0; d.spotted = false; d.spottedTimer = 0;
@@ -698,25 +720,33 @@
   }
 
   // ----- Helpers -----
-  function isHidden() {
+  function isHiddenAt(x, y) {
     for (const s of G.hidingSpots) {
-      if (Math.hypot(s.x - G.knightX, s.y - G.knightY) < s.r + 4) return true;
+      if (Math.hypot(s.x - x, s.y - y) < s.r + 4) return true;
     }
     return false;
   }
+  function isHidden() { return isHiddenAt(G.knightX, G.knightY); }
+  function knight2Active() { return G.mode === "2p"; }
+  function getKnights() {
+    const list = [{ num: 1, x: G.knightX, y: G.knightY }];
+    if (knight2Active()) list.push({ num: 2, x: G.knight2X, y: G.knight2Y });
+    return list;
+  }
 
-  function dragonSeesKnight(d) {
-    const dx = G.knightX - d.x;
-    const dy = G.knightY - d.y;
+  function dragonSeesPoint(d, kx, ky) {
+    const dx = kx - d.x;
+    const dy = ky - d.y;
     const dist = Math.hypot(dx, dy);
     if (dist > d.reach) return { visible: false, dist };
-    if (isHidden()) return { visible: false, dist };
+    if (isHiddenAt(kx, ky)) return { visible: false, dist };
     const angleTo = Math.atan2(dy, dx);
     let diff = angleTo - d.gazeAngle;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     return { visible: Math.abs(diff) < d.cone, dist };
   }
+  function dragonSeesKnight(d) { return dragonSeesPoint(d, G.knightX, G.knightY); }
 
   // ----- Update -----
   // ----- Ending (friendship cutscene after final win) -----
@@ -900,20 +930,31 @@
   }
 
   // ----- Carry (dragon swoops, grabs, flies knight back to start) -----
-  function startCarry(d) {
+  function startCarry(d, knightNum) {
     if (G.carry) return;
+    const n = knightNum || 1;
+    const kx = n === 2 ? G.knight2X : G.knightX;
+    const ky = n === 2 ? G.knight2Y : G.knightY;
+    const sx = n === 2 ? G.knight2StartX : G.knightStartX;
+    const sy = n === 2 ? G.knight2StartY : G.knightStartY;
     G.carry = {
       dragon: d,
+      knightNum: n,
       phase: "swoop",
       t: 0,
       fromX: d.x, fromY: d.y,
-      grabX: G.knightX, grabY: G.knightY,
-      startX: G.knightStartX, startY: G.knightStartY,
+      grabX: kx, grabY: ky,
+      startX: sx, startY: sy,
       postX: d.startX, postY: d.startY,
       swoopFrames: 50,
       carryFrames: 90,
       flybackFrames: 40,
     };
+  }
+
+  function setCarriedKnight(c, x, y) {
+    if (c.knightNum === 2) { G.knight2X = x; G.knight2Y = y; }
+    else { G.knightX = x; G.knightY = y; }
   }
 
   function updateCarry() {
@@ -933,10 +974,8 @@
       const py = c.grabY + (c.startY - c.grabY) * ke - Math.sin(k * Math.PI) * 110;
       c.dragon.x = px;
       c.dragon.y = py;
-      G.knightX = px;
-      G.knightY = py + 34;
-      G.petWalk += 0.05;
-      if (k >= 1) { c.phase = "flyback"; c.t = 0; G.knightX = c.startX; G.knightY = c.startY; }
+      setCarriedKnight(c, px, py + 34);
+      if (k >= 1) { c.phase = "flyback"; c.t = 0; setCarriedKnight(c, c.startX, c.startY); }
     } else if (c.phase === "flyback") {
       const k = Math.min(1, c.t / c.flybackFrames);
       const ke = k * k * (3 - 2 * k);
@@ -944,7 +983,7 @@
       c.dragon.y = c.startY + (c.postY - c.startY) * ke - Math.sin(k * Math.PI) * 90;
       if (k >= 1) {
         c.dragon.x = c.postX; c.dragon.y = c.postY;
-        const finishedDragon = c.dragon;
+        const carriedNum = c.knightNum;
         G.carry = null;
         G.dragons.forEach(dr => {
           dr.alertness = 0;
@@ -953,8 +992,21 @@
           if (dr.patrol) dr.patrol.idx = 0;
           dr.x = dr.startX; dr.y = dr.startY;
         });
-        G.lingerTime = 0;
-        showScreen("caught");
+        if (carriedNum === 2) {
+          G.lingerTime2 = 0;
+          G.lastKnight2X = G.knight2X;
+          G.lastKnight2Y = G.knight2Y;
+        } else {
+          G.lingerTime = 0;
+          G.lastKnightX = G.knightX;
+          G.lastKnightY = G.knightY;
+        }
+        // In 2P, the other knight keeps playing — no caught modal
+        if (knight2Active()) {
+          // nothing — play continues seamlessly
+        } else {
+          showScreen("caught");
+        }
       }
     }
   }
@@ -967,7 +1019,7 @@
     if (G.ending) { updateEnding(); return; }
     if (G.carry) { updateCarry(); return; }
 
-    // Knight movement
+    // ---- Knight 1 movement (arrows + tap) ----
     let dx = 0, dy = 0;
     if (keys["arrowleft"]) dx -= 1;
     if (keys["arrowright"]) dx += 1;
@@ -988,15 +1040,40 @@
     }
     G.knightX = Math.max(20, Math.min(W - 20, G.knightX));
     G.knightY = Math.max(40, Math.min(H - 30, G.knightY));
+    if (!G.gateOpen && G.knightX > G.gate.x - 12) G.knightX = G.gate.x - 12;
 
-    // Gate blocks the knight when closed
-    if (!G.gateOpen && G.knightX > G.gate.x - 12) {
-      G.knightX = G.gate.x - 12;
+    // ---- Knight 2 movement (WASD, 2P only) ----
+    if (knight2Active()) {
+      let dx2 = 0, dy2 = 0;
+      if (keys["a"]) dx2 -= 1;
+      if (keys["d"]) dx2 += 1;
+      if (keys["w"]) dy2 -= 1;
+      if (keys["s"]) dy2 += 1;
+      if (dx2 || dy2) {
+        const len2 = Math.hypot(dx2, dy2) || 1;
+        const sp2 = G.knight.speed;
+        G.knight2X += (dx2 / len2) * sp2;
+        G.knight2Y += (dy2 / len2) * sp2;
+        G.knight2Dir = Math.atan2(dy2, dx2);
+        G.knight2Walk += 0.25;
+      }
+      G.knight2X = Math.max(20, Math.min(W - 20, G.knight2X));
+      G.knight2Y = Math.max(40, Math.min(H - 30, G.knight2Y));
+      if (!G.gateOpen && G.knight2X > G.gate.x - 12) G.knight2X = G.gate.x - 12;
     }
 
-    // Linger timer — can't camp behind one tree forever
-    const moveDist = Math.hypot(G.knightX - G.lastKnightX, G.knightY - G.lastKnightY);
-    if (moveDist < 0.6) G.lingerTime++;
+    // ---- Linger timers ----
+    function nearestDragonTo(x, y) {
+      let nearest = G.dragons[0], minD = Infinity;
+      for (const dr of G.dragons) {
+        const dd = Math.hypot(dr.x - x, dr.y - y);
+        if (dd < minD) { minD = dd; nearest = dr; }
+      }
+      return nearest;
+    }
+
+    const moveDist1 = Math.hypot(G.knightX - G.lastKnightX, G.knightY - G.lastKnightY);
+    if (moveDist1 < 0.6) G.lingerTime++;
     else G.lingerTime = Math.max(0, G.lingerTime - 4);
     G.lastKnightX = G.knightX;
     G.lastKnightY = G.knightY;
@@ -1004,31 +1081,57 @@
       G.lingerTime = 0;
       playRoar();
       G.caughtReason = "linger";
-      let nearest = G.dragons[0], minD = Infinity;
-      for (const dr of G.dragons) {
-        const dd = Math.hypot(dr.x - G.knightX, dr.y - G.knightY);
-        if (dd < minD) { minD = dd; nearest = dr; }
-      }
-      if (nearest) startCarry(nearest);
+      const nearest = nearestDragonTo(G.knightX, G.knightY);
+      if (nearest) startCarry(nearest, 1);
       return;
     }
-
-    // Pet follows the knight at a small offset
-    const ptX = G.knightX - 26;
-    const ptY = G.knightY + 14;
-    const ppx = ptX - G.petX, ppy = ptY - G.petY;
-    const ppd = Math.hypot(ppx, ppy);
-    if (ppd > 4) {
-      const ps = Math.min(ppd * 0.18, G.knight.speed + 0.6);
-      G.petX += (ppx / ppd) * ps;
-      G.petY += (ppy / ppd) * ps;
-      G.petWalk += 0.3;
+    if (knight2Active()) {
+      const moveDist2 = Math.hypot(G.knight2X - G.lastKnight2X, G.knight2Y - G.lastKnight2Y);
+      if (moveDist2 < 0.6) G.lingerTime2++;
+      else G.lingerTime2 = Math.max(0, G.lingerTime2 - 4);
+      G.lastKnight2X = G.knight2X;
+      G.lastKnight2Y = G.knight2Y;
+      if (G.lingerTime2 >= LINGER_LIMIT) {
+        G.lingerTime2 = 0;
+        playRoar();
+        G.caughtReason = "linger";
+        const nearest = nearestDragonTo(G.knight2X, G.knight2Y);
+        if (nearest) startCarry(nearest, 2);
+        return;
+      }
     }
 
-    // Pet activates the lever -> opens the gate
+    // Pet 1 follows knight 1
+    {
+      const ptX = G.knightX - 26, ptY = G.knightY + 14;
+      const ppx = ptX - G.petX, ppy = ptY - G.petY;
+      const ppd = Math.hypot(ppx, ppy);
+      if (ppd > 4) {
+        const ps = Math.min(ppd * 0.18, G.knight.speed + 0.6);
+        G.petX += (ppx / ppd) * ps;
+        G.petY += (ppy / ppd) * ps;
+        G.petWalk += 0.3;
+      }
+    }
+    // Pet 2 follows knight 2 (2P only)
+    if (knight2Active()) {
+      const ptX2 = G.knight2X - 26, ptY2 = G.knight2Y + 14;
+      const ppx2 = ptX2 - G.pet2X, ppy2 = ptY2 - G.pet2Y;
+      const ppd2 = Math.hypot(ppx2, ppy2);
+      if (ppd2 > 4) {
+        const ps2 = Math.min(ppd2 * 0.18, G.knight.speed + 0.6);
+        G.pet2X += (ppx2 / ppd2) * ps2;
+        G.pet2Y += (ppy2 / ppd2) * ps2;
+        G.pet2Walk += 0.3;
+      }
+    }
+
+    // Either pet can activate the lever
     if (!G.gateOpen) {
-      const ldx = G.lever.x - G.petX, ldy = G.lever.y - G.petY;
-      if (Math.hypot(ldx, ldy) < G.lever.r) {
+      const checkPet = (px, py) => Math.hypot(G.lever.x - px, G.lever.y - py) < G.lever.r;
+      const pet1Hit = checkPet(G.petX, G.petY);
+      const pet2Hit = knight2Active() && checkPet(G.pet2X, G.pet2Y);
+      if (pet1Hit || pet2Hit) {
         G.gateOpen = true;
         G.gateOpenT = 0;
         playSparkle();
@@ -1068,24 +1171,17 @@
         }
       }
 
-      // Gaze target
-      if (G.mode === "2p" && di === 0) {
-        let gdx = 0, gdy = 0;
-        if (keys["a"]) gdx -= 1;
-        if (keys["d"]) gdx += 1;
-        if (keys["w"]) gdy -= 1;
-        if (keys["s"]) gdy += 1;
-        if (gdx || gdy) d.gazeTarget = Math.atan2(gdy, gdx);
+      // Gaze target — AI controlled (tracks visible knight if alert; else patrols/sweeps)
+      const targetKx = (d.lastSeenKnight === 2 && knight2Active()) ? G.knight2X : G.knightX;
+      const targetKy = (d.lastSeenKnight === 2 && knight2Active()) ? G.knight2Y : G.knightY;
+      if (d.alertness > 25) {
+        d.gazeTarget = Math.atan2(targetKy - d.y, targetKx - d.x);
+      } else if (d.patrol) {
+        const wp = d.patrol.points[d.patrol.idx];
+        d.gazeTarget = Math.atan2(wp.y - d.y, wp.x - d.x);
       } else {
-        if (d.alertness > 25) {
-          d.gazeTarget = Math.atan2(G.knightY - d.y, G.knightX - d.x);
-        } else if (d.patrol) {
-          const wp = d.patrol.points[d.patrol.idx];
-          d.gazeTarget = Math.atan2(wp.y - d.y, wp.x - d.x);
-        } else {
-          const phase = G.time * 0.005 + di * 1.7;
-          d.gazeTarget = Math.PI + Math.sin(phase) * 0.6;
-        }
+        const phase = G.time * 0.005 + di * 1.7;
+        d.gazeTarget = Math.PI + Math.sin(phase) * 0.6;
       }
       let gdiff = d.gazeTarget - d.gazeAngle;
       while (gdiff > Math.PI) gdiff -= Math.PI * 2;
@@ -1093,45 +1189,64 @@
       const gazeSpeed = d.alertness > 50 ? 0.07 : 0.025;
       d.gazeAngle += gdiff * gazeSpeed;
 
-      // Vision -> alertness
-      const see = dragonSeesKnight(d);
-      if (see.visible) {
-        const closeness = Math.max(0, 1 - see.dist / d.reach);
+      // Vision -> alertness (checks every active knight)
+      const knightsForDragon = getKnights();
+      let bestSee = { visible: false, dist: Infinity, num: 1 };
+      for (const k of knightsForDragon) {
+        const see = dragonSeesPoint(d, k.x, k.y);
+        if (see.visible && see.dist < bestSee.dist) {
+          bestSee = { visible: true, dist: see.dist, num: k.num };
+        }
+      }
+      if (bestSee.visible) {
+        const closeness = Math.max(0, 1 - bestSee.dist / d.reach);
         d.alertness += d.wake * (0.6 + closeness * 1.4);
+        d.lastSeenKnight = bestSee.num;
       } else {
         d.alertness -= d.decay;
       }
       d.alertness = Math.max(0, Math.min(100, d.alertness));
 
-      // Touch check — bumping into the dragon = caught
+      // Touch check — bumping into the dragon = caught (per knight)
       if (!d.spotted) {
-        const tdx = G.knightX - d.x;
-        const tdy = G.knightY - d.y;
-        const touchR = 52 * d.scale;
-        if (Math.hypot(tdx, tdy) < touchR) {
-          if (G.knightHasShield) {
-            G.knightHasShield = false;
-            const ang = Math.atan2(tdy, tdx) || Math.PI;
-            G.knightX = d.x + Math.cos(ang) * (touchR + 14);
-            G.knightY = d.y + Math.sin(ang) * (touchR + 14);
-            G.knightX = Math.max(20, Math.min(W - 20, G.knightX));
-            G.knightY = Math.max(40, Math.min(H - 30, G.knightY));
-            d.alertness = 60;
-            playSnore();
-          } else {
-            d.spotted = true;
-            d.spottedTimer = 60;
-            d.alertness = 100;
-            playRoar();
-            G.caughtReason = "touched";
-            startCarry(d);
+        for (const k of knightsForDragon) {
+          const tdx = k.x - d.x;
+          const tdy = k.y - d.y;
+          const touchR = 52 * d.scale;
+          if (Math.hypot(tdx, tdy) < touchR) {
+            const hasShield = k.num === 2 ? G.knight2HasShield : G.knightHasShield;
+            if (hasShield) {
+              if (k.num === 2) G.knight2HasShield = false;
+              else G.knightHasShield = false;
+              const ang = Math.atan2(tdy, tdx) || Math.PI;
+              const nx = d.x + Math.cos(ang) * (touchR + 14);
+              const ny = d.y + Math.sin(ang) * (touchR + 14);
+              const cx2 = Math.max(20, Math.min(W - 20, nx));
+              const cy2 = Math.max(40, Math.min(H - 30, ny));
+              if (k.num === 2) { G.knight2X = cx2; G.knight2Y = cy2; }
+              else { G.knightX = cx2; G.knightY = cy2; }
+              d.alertness = 60;
+              playSnore();
+            } else {
+              d.spotted = true;
+              d.spottedTimer = 60;
+              d.alertness = 100;
+              d.lastSeenKnight = k.num;
+              playRoar();
+              G.caughtReason = "touched";
+              startCarry(d, k.num);
+              break;
+            }
           }
         }
       }
 
       if (d.alertness >= 100 && !d.spotted) {
-        if (G.knightHasShield) {
-          G.knightHasShield = false;
+        const targetNum = d.lastSeenKnight || 1;
+        const hasShield = targetNum === 2 ? G.knight2HasShield : G.knightHasShield;
+        if (hasShield) {
+          if (targetNum === 2) G.knight2HasShield = false;
+          else G.knightHasShield = false;
           d.alertness = 40;
           playSnore();
         } else {
@@ -1139,7 +1254,7 @@
           playRoar();
           d.spottedTimer = 60;
           if (G.caughtReason !== "touched") G.caughtReason = "spotted";
-          startCarry(d);
+          startCarry(d, targetNum);
         }
       }
       if (d.spotted) {
@@ -1161,12 +1276,28 @@
 
     // (spotted -> carry sequence is started where d.spotted becomes true)
 
-    // ---- Baby dragons ----
-    const knightHidden = isHidden();
+    // ---- Baby dragons (target nearest visible knight) ----
     for (const b of G.babies) {
-      const dx = G.knightX - b.x;
-      const dy = G.knightY - b.y;
-      const dist = Math.hypot(dx, dy);
+      const knightChoices = getKnights().map(k => ({
+        ...k,
+        hidden: isHiddenAt(k.x, k.y),
+        dist: Math.hypot(k.x - b.x, k.y - b.y),
+      }));
+      // Pick visible knight with smallest distance; fall back to nearest hidden
+      let target = null;
+      for (const k of knightChoices) {
+        if (k.hidden) continue;
+        if (!target || k.dist < target.dist) target = k;
+      }
+      if (!target) {
+        for (const k of knightChoices) {
+          if (!target || k.dist < target.dist) target = k;
+        }
+      }
+      const dx = target.x - b.x;
+      const dy = target.y - b.y;
+      const dist = target.dist;
+      const knightHidden = target.hidden;
       if (b.smokeT > 0) b.smokeT--;
 
       if (b.state === "wander") {
@@ -1224,33 +1355,51 @@
       b.y = Math.max(50, Math.min(H - 40, b.y));
     }
 
-    // ---- Fireballs ----
+    // ---- Fireballs (hit either knight) ----
+    let burnedThisFrame = false;
     for (const f of G.fireballs) {
       f.t = (f.t || 0) + 1;
       f.x += f.vx;
       f.y += f.vy;
       f.life--;
-      if (Math.hypot(f.x - G.knightX, f.y - G.knightY) < 16) {
-        if (G.knightHasShield) {
-          G.knightHasShield = false;
-          f.life = 0;
-          playSnore();
-        } else {
-          G.caughtReason = "burned";
-          f.life = 0;
-          playRoar();
-          showScreen("caught");
-          return;
+      if (burnedThisFrame || f.life <= 0) continue;
+      for (const k of getKnights()) {
+        if (Math.hypot(f.x - k.x, f.y - k.y) < 16) {
+          const hasShield = k.num === 2 ? G.knight2HasShield : G.knightHasShield;
+          if (hasShield) {
+            if (k.num === 2) G.knight2HasShield = false;
+            else G.knightHasShield = false;
+            f.life = 0;
+            playSnore();
+          } else {
+            G.caughtReason = "burned";
+            f.life = 0;
+            playRoar();
+            // Nearest dragon does the carry; if no dragons, fall back to caught modal
+            let nearestDragon = null, minDD = Infinity;
+            for (const dr of G.dragons) {
+              const dd = Math.hypot(dr.x - k.x, dr.y - k.y);
+              if (dd < minDD) { minDD = dd; nearestDragon = dr; }
+            }
+            if (nearestDragon) startCarry(nearestDragon, k.num);
+            else if (!knight2Active()) showScreen("caught");
+            burnedThisFrame = true;
+          }
+          break;
         }
       }
     }
     G.fireballs = G.fireballs.filter(f =>
       f.life > 0 && f.x > -30 && f.x < W + 30 && f.y > -30 && f.y < H + 30
     );
+    if (burnedThisFrame) return;
 
-    // Win
+    // Win — either knight reaching the door wins the level
     const doorX = W - 90, doorY = H/2;
-    if (Math.hypot(G.knightX - doorX, G.knightY - doorY) < 40) {
+    const knight1AtDoor = Math.hypot(G.knightX - doorX, G.knightY - doorY) < 40;
+    const knight2AtDoor = knight2Active() &&
+      Math.hypot(G.knight2X - doorX, G.knight2Y - doorY) < 40;
+    if (knight1AtDoor || knight2AtDoor) {
       playSparkle();
       if (G.levelIdx + 1 >= LEVELS.length) {
         startEnding();
@@ -1525,17 +1674,17 @@
     }
   }
 
-  function drawPet() {
+  function drawPet(num) {
+    const isP2 = num === 2;
     const p = G.pet;
-    const x = G.petX, y = G.petY;
-    const moving = Math.hypot(G.knightX - 26 - x, G.knightY + 14 - y) > 4;
-    const bob = moving ? Math.sin(G.petWalk) * 1.6 : Math.sin(G.time * 0.1) * 0.8;
-    const hidden = (() => {
-      for (const s of G.hidingSpots) {
-        if (Math.hypot(s.x - x, s.y - y) < s.r + 4) return true;
-      }
-      return false;
-    })();
+    const x = isP2 ? G.pet2X : G.petX;
+    const y = isP2 ? G.pet2Y : G.petY;
+    const walk = isP2 ? G.pet2Walk : G.petWalk;
+    const ownerX = isP2 ? G.knight2X : G.knightX;
+    const ownerY = isP2 ? G.knight2Y : G.knightY;
+    const moving = Math.hypot(ownerX - 26 - x, ownerY + 14 - y) > 4;
+    const bob = moving ? Math.sin(walk) * 1.6 : Math.sin(G.time * 0.1) * 0.8;
+    const hidden = isHiddenAt(x, y);
 
     ctx.save();
     ctx.translate(x, y + bob);
@@ -1546,7 +1695,7 @@
     ctx.beginPath(); ctx.ellipse(0, 9, 11, 3, 0, 0, Math.PI*2); ctx.fill();
 
     // tail (animates while moving)
-    const wag = moving ? Math.sin(G.petWalk * 1.4) * 4 : Math.sin(G.time * 0.08) * 2;
+    const wag = moving ? Math.sin(walk * 1.4) * 4 : Math.sin(G.time * 0.08) * 2;
     ctx.fillStyle = p.body;
     if (p.id === "bunny") {
       ctx.beginPath(); ctx.arc(11, -1, 4, 0, Math.PI*2); ctx.fill();
@@ -1889,11 +2038,17 @@
     }
   }
 
-  function drawKnight() {
-    const x = G.knightX, y = G.knightY;
+  function drawKnight(num) {
+    const isP2 = num === 2;
+    const x = isP2 ? G.knight2X : G.knightX;
+    const y = isP2 ? G.knight2Y : G.knightY;
+    const walk = isP2 ? G.knight2Walk : G.knightWalk;
+    const hasShield = isP2 ? G.knight2HasShield : G.knightHasShield;
+    const lingerT = isP2 ? G.lingerTime2 : G.lingerTime;
     const k = G.knight;
-    const bob = Math.sin(G.knightWalk) * 2;
-    const hidden = isHidden();
+    const tunic = isP2 ? K2_COLOR : k.color;
+    const bob = Math.sin(walk) * 2;
+    const hidden = isHiddenAt(x, y);
 
     ctx.save();
     ctx.translate(x, y + bob);
@@ -1906,7 +2061,7 @@
     ctx.fillRect(-7, 6, 5, 12);
     ctx.fillRect(2, 6, 5, 12);
 
-    ctx.fillStyle = k.color;
+    ctx.fillStyle = tunic;
     ctx.fillRect(-10, -10, 20, 18);
     ctx.fillStyle = "#5e3b1f";
     ctx.fillRect(-10, 4, 20, 3);
@@ -1920,7 +2075,7 @@
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = "#222";
     ctx.fillRect(-5, -16, 10, 2);
-    ctx.fillStyle = G.knightHasShield ? "#ffd166" : k.color;
+    ctx.fillStyle = hasShield ? "#ffd166" : tunic;
     ctx.beginPath();
     ctx.moveTo(0, -27); ctx.lineTo(-3, -22); ctx.lineTo(3, -22); ctx.closePath(); ctx.fill();
 
@@ -1930,7 +2085,7 @@
       ctx.fillStyle = "#5e3b1f";
       ctx.fillRect(8, 6, 8, 4);
     } else if (k.id === "shield") {
-      if (G.knightHasShield) {
+      if (hasShield) {
         ctx.fillStyle = "#5db1ff";
         ctx.beginPath();
         ctx.moveTo(-16, -10); ctx.lineTo(-6, -10); ctx.lineTo(-6, 6);
@@ -1961,8 +2116,8 @@
     }
 
     // Linger timer — warns the player to keep moving
-    if (G.lingerTime > LINGER_WARN) {
-      const progress = Math.min(1, (G.lingerTime - LINGER_WARN) / (LINGER_LIMIT - LINGER_WARN));
+    if (lingerT > LINGER_WARN) {
+      const progress = Math.min(1, (lingerT - LINGER_WARN) / (LINGER_LIMIT - LINGER_WARN));
       const cx = x, cy = y - 56;
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI*2); ctx.fill();
@@ -2006,7 +2161,7 @@
     ctx.fillStyle = "rgba(74, 44, 95, 0.7)";
     ctx.font = "14px 'Comic Sans MS', sans-serif";
     if (G.mode === "2p") {
-      ctx.fillText("P2 Knight: arrow keys or tap   |   P1 Dragon: WASD to look around", 16, H - 14);
+      ctx.fillText("P1 Knight (blue): arrow keys or tap   |   P2 Knight (pink): WASD", 16, H - 14);
     } else {
       ctx.fillText("Knight: arrow keys or tap to move. Hide behind trees, rocks & bushes!", 16, H - 14);
     }
@@ -2020,8 +2175,10 @@
     G.dragons.forEach(drawDragon);
     G.babies.forEach(drawBaby);
     drawZs();
-    drawPet();
-    drawKnight();
+    drawPet(1);
+    if (knight2Active()) drawPet(2);
+    drawKnight(1);
+    if (knight2Active()) drawKnight(2);
     if (!G.ending) drawGate();
     if (!G.ending) drawFireballs();
     drawSpottedFlash();
