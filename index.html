@@ -150,6 +150,15 @@
     <button class="go" id="cleared-next">Next Level ▶</button>
   </div>
 
+  <div id="screen-more" class="screen hidden">
+    <h1>🏆 You Beat 5 Levels! 🏆</h1>
+    <div class="subtitle">You saved the princess from FIVE different dragons! Do you want to try some bonus levels — or are you ready to celebrate your win?</div>
+    <div class="row">
+      <button class="go" id="more-yes">Yes, more levels! ▶</button>
+      <button class="go back" id="more-no">No, I'm done — let's celebrate! 🎉</button>
+    </div>
+  </div>
+
   <div id="screen-win" class="screen hidden">
     <h1>👑 You Saved the Princess! 💖</h1>
     <div class="subtitle">It turns out the dragon was just lonely all along! You, the princess, your trusty pet, and the dragon are now best friends forever. The kingdom is safe — and Aria is the bravest, kindest hero of all. 🐉💖👸⚔️🐾</div>
@@ -372,7 +381,80 @@
       babies: [{ x: 450, y: 350 }, { x: 850, y: 220 }, { x: 1250, y: 420 }],
       lever: { x: 1430, y: H - 70 },
     },
+    // ----- Bonus levels (unlocked after completing the base 5) -----
+    {
+      name: "Moonlight Meadow",
+      intro: "Bonus level 1! The dragon hunts under a starry sky. Two dragons share watch duty — one patrols, one stares.",
+      worldWidth: 1300,
+      bg: { top: "#1f2858", mid: "#3a3f78", bot: "#65548a" },
+      pathColor: "#5e4a7a",
+      spots: [
+        [180,180,"tree",36],[280,420,"bush",30],[380,260,"rock",30],
+        [470,500,"tree",38],[560,160,"bush",30],[660,360,"rock",32],
+        [760,500,"tree",36],[840,240,"bush",28],[920,440,"rock",30],
+        [1020,180,"bush",30],[1100,360,"tree",36],
+      ],
+      dragons: [
+        { xFromRight: 260, y: H/2-100, reach: 300, cone: 0.6, wake: 0.8, decay: 0.5 },
+        { xFromRight: 260, y: H/2+120, reach: 300, cone: 0.6, wake: 0.8, decay: 0.5,
+          colorId: "purple",
+          patrol: [{xFromRight:260,y:H/2+40},{xFromRight:260,y:H/2+200}], patrolSpeed: 0.6 },
+      ],
+      babies: [{ x: 540, y: 320 }, { x: 900, y: 250 }],
+      lever: { x: 1070, y: 90 },
+    },
+    {
+      name: "Volcano Path",
+      intro: "Bonus level 2! A fiery slope guarded by a huge red dragon and lots of grumpy hatchlings. Mind the fireballs!",
+      worldWidth: 1500,
+      bg: { top: "#3a1a1a", mid: "#a8492c", bot: "#ffb56b" },
+      pathColor: "#5a2a18",
+      spots: [
+        [180,180,"rock",36],[280,400,"rock",32],[380,260,"bush",28],
+        [480,160,"rock",30],[580,460,"bush",28],[680,300,"rock",32],
+        [780,180,"rock",30],[880,440,"bush",28],[980,260,"rock",32],
+        [1080,160,"rock",28],[1180,420,"bush",30],[1280,260,"rock",30],
+      ],
+      dragons: [{
+        xFromRight: 220, y: H/2, reach: 360, cone: 0.7, wake: 0.95, decay: 0.45,
+        scale: 1.2, colorId: "red",
+        patrol: [{xFromRight:220,y:H/2-120},{xFromRight:220,y:H/2+120}], patrolSpeed: 0.55,
+      }],
+      babies: [
+        { x: 420, y: 280 }, { x: 720, y: 420 },
+        { x: 1020, y: 220 }, { x: 1240, y: 380 },
+      ],
+      lever: { x: 1230, y: 90 },
+    },
+    {
+      name: "Cloud Kingdom",
+      intro: "Final bonus level! Two giant dragons patrol the sky castle while their many babies roam. You can do this!",
+      worldWidth: 1700,
+      bg: { top: "#ffe0f4", mid: "#cfeaff", bot: "#fff7d4" },
+      pathColor: "#d8b6f0",
+      spots: [
+        [200,160,"bush",32],[290,400,"bush",30],[400,250,"rock",28],
+        [510,470,"bush",30],[620,200,"rock",30],[720,400,"bush",32],
+        [380,90,"bush",24],[820,520,"bush",26],[920,160,"rock",30],
+        [1020,440,"bush",36],[1140,260,"bush",28],[1240,500,"rock",30],
+        [1340,180,"bush",30],[1440,400,"rock",30],[1540,260,"bush",28],
+      ],
+      dragons: [
+        { xFromRight: 280, y: H/2-130, reach: 340, cone: 0.7, wake: 0.9, decay: 0.45,
+          colorId: "blue",
+          patrol: [{xFromRight:280,y:H/2-180},{xFromRight:280,y:H/2-40}], patrolSpeed: 0.6 },
+        { xFromRight: 280, y: H/2+140, reach: 340, cone: 0.7, wake: 0.9, decay: 0.45,
+          colorId: "pink",
+          patrol: [{xFromRight:280,y:H/2+50},{xFromRight:280,y:H/2+200}], patrolSpeed: 0.55 },
+      ],
+      babies: [
+        { x: 430, y: 320 }, { x: 760, y: 220 },
+        { x: 1100, y: 380 }, { x: 1380, y: 230 },
+      ],
+      lever: { x: 1500, y: H - 70 },
+    },
   ];
+  const BASE_LEVELS_COUNT = 5;
 
   const G = {
     scene: "mode",
@@ -459,6 +541,7 @@
   const scrPet     = document.getElementById("screen-pet");
   const scrLevel   = document.getElementById("screen-level");
   const scrCleared = document.getElementById("screen-cleared");
+  const scrMore    = document.getElementById("screen-more");
   const scrWin     = document.getElementById("screen-win");
   const scrCaught  = document.getElementById("screen-caught");
   const hud        = document.getElementById("hud");
@@ -466,7 +549,7 @@
   const statusEl   = document.getElementById("status");
   const levelPill  = document.getElementById("level-pill");
 
-  const ALL_SCREENS = [scrStory, scrMode, scrDragon, scrKnight, scrPet, scrLevel, scrCleared, scrWin, scrCaught];
+  const ALL_SCREENS = [scrStory, scrMode, scrDragon, scrKnight, scrPet, scrLevel, scrCleared, scrMore, scrWin, scrCaught];
 
   function showScreen(name) {
     ALL_SCREENS.forEach(s => s.classList.add("hidden"));
@@ -477,6 +560,7 @@
     if (name === "pet") scrPet.classList.remove("hidden");
     if (name === "level") scrLevel.classList.remove("hidden");
     if (name === "cleared") scrCleared.classList.remove("hidden");
+    if (name === "more") scrMore.classList.remove("hidden");
     if (name === "win") scrWin.classList.remove("hidden");
     if (name === "caught") { scrCaught.classList.remove("hidden"); updateCaughtScreen(); }
     hud.classList.toggle("hidden", name !== "play");
@@ -587,6 +671,11 @@
 
   document.getElementById("level-begin").addEventListener("click", () => { showScreen("play"); });
   document.getElementById("cleared-next").addEventListener("click", () => { enterLevel(G.levelIdx + 1); });
+  document.getElementById("more-yes").addEventListener("click", () => { enterLevel(G.levelIdx + 1); });
+  document.getElementById("more-no").addEventListener("click", () => {
+    showScreen("play");
+    startEnding();
+  });
   document.getElementById("win-again").addEventListener("click", () => showScreen("mode"));
   document.getElementById("caught-retry").addEventListener("click", () => { resetPositions(); showScreen("play"); });
 
@@ -1404,7 +1493,11 @@
       Math.hypot(G.knight2X - doorX, G.knight2Y - doorY) < 40;
     if (knight1AtDoor || knight2AtDoor) {
       playSparkle();
-      if (G.levelIdx + 1 >= LEVELS.length) {
+      const justBeatBaseFinale =
+        G.levelIdx === BASE_LEVELS_COUNT - 1 && LEVELS.length > BASE_LEVELS_COUNT;
+      if (justBeatBaseFinale) {
+        showScreen("more");
+      } else if (G.levelIdx + 1 >= LEVELS.length) {
         startEnding();
       } else {
         document.getElementById("cleared-msg").textContent =
