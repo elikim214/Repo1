@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for auto-pulling the dragon-game repo every 60 seconds.
+  Don't load this file directly — run scripts/install-autopull.sh, which
+  substitutes REPO_DIR with the absolute path on this machine and copies
+  the final plist into ~/Library/LaunchAgents/.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aria.dragongame.autopull</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>REPO_DIR/scripts/auto-pull.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/dragongame-autopull.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/dragongame-autopull.log</string>
+</dict>
+</plist>
