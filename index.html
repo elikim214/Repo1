@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#ff7eb3">
+<title>Tiny World — Play & Dress Up</title>
+<style>
+  :root{
+    --pink:#ff7eb3; --pink2:#ff65a3; --purple:#9d7bff; --blue:#5ec8ff;
+    --yellow:#ffd166; --green:#7ee08e; --cream:#fff5ef; --ink:#3a2a44;
+    --shadow:0 6px 18px rgba(90,40,90,.18);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation;}
+  html,body{margin:0;height:100%;overflow:hidden;}
+  body{
+    font-family:'Baloo 2','Comic Sans MS','Segoe UI',system-ui,sans-serif;
+    background:linear-gradient(160deg,#ffd6e8,#d9c6ff 55%,#c3ecff);
+    color:var(--ink); user-select:none; -webkit-user-select:none;
+    position:fixed; inset:0;
+  }
+  #app{position:absolute; inset:0; display:flex; flex-direction:column;}
+
+  /* ---------- Top bar ---------- */
+  #topbar{
+    flex:0 0 auto; display:flex; align-items:center; gap:8px;
+    padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;
+    background:linear-gradient(90deg,var(--pink),var(--purple));
+    color:#fff; box-shadow:var(--shadow); z-index:30;
+  }
+  #topbar h1{font-size:18px;margin:0;flex:1;letter-spacing:.5px;text-shadow:0 2px 0 rgba(0,0,0,.12);}
+  .pill{background:rgba(255,255,255,.25);border-radius:20px;padding:5px 12px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:5px;}
+  .iconbtn{
+    width:40px;height:40px;border:none;border-radius:50%;
+    background:rgba(255,255,255,.22);color:#fff;font-size:20px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:transform .1s,background .2s;
+  }
+  .iconbtn:active{transform:scale(.88);background:rgba(255,255,255,.4);}
+
+  /* ---------- Stage ---------- */
+  #stage{position:relative;flex:1 1 auto;overflow:hidden;}
+  .scene{position:absolute;inset:0;display:none;}
+  .scene.active{display:block;}
+
+  /* ---------- World map ---------- */
+  #map{background:
+      radial-gradient(circle at 20% 20%, #fff7c7 0 60px, transparent 61px),
+      linear-gradient(180deg,#bfe9ff,#e3ffd9 60%,#caffd0);
+    overflow:auto;
+  }
+  #mapInner{position:relative;width:100%;height:100%;min-height:100%;}
+  .cloud{position:absolute;background:#fff;border-radius:50px;opacity:.85;filter:blur(.3px);animation:float 9s ease-in-out infinite;}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  .place{
+    position:absolute;width:120px;text-align:center;cursor:pointer;
+    transition:transform .15s;
+  }
+  .place:active{transform:scale(.9);}
+  .place .bubble{
+    width:96px;height:96px;margin:0 auto 4px;border-radius:28px;
+    display:flex;align-items:center;justify-content:center;font-size:50px;
+    box-shadow:var(--shadow);border:4px solid #fff;
+  }
+  .place .label{
+    background:#fff;border-radius:14px;padding:3px 8px;font-size:13px;font-weight:700;
+    display:inline-block;box-shadow:0 2px 6px rgba(0,0,0,.12);
+  }
+
+  /* ---------- Rooms ---------- */
+  .room{width:100%;height:100%;position:relative;overflow:hidden;}
+  .roomFloor{position:absolute;left:0;right:0;bottom:0;height:38%;}
+  .furni{
+    position:absolute;font-size:46px;cursor:grab;filter:drop-shadow(0 4px 4px rgba(0,0,0,.25));
+    transition:transform .05s;
+  }
+  .furni.dragging{cursor:grabbing;z-index:50;transform:scale(1.12);}
+
+  /* ---------- Character ---------- */
+  .charWrap{position:absolute;bottom:6%;left:50%;transform:translateX(-50%);width:150px;height:230px;cursor:grab;z-index:20;}
+  .charWrap.dragging{z-index:60;}
+  svg.char{width:100%;height:100%;overflow:visible;}
+  .bounce{animation:bob 2.2s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+  /* ---------- Bottom dock ---------- */
+  #dock{
+    flex:0 0 auto;display:flex;gap:6px;padding:8px 8px calc(env(safe-area-inset-bottom) + 8px);
+    background:#fff;box-shadow:0 -4px 16px rgba(120,60,120,.15);z-index:30;overflow-x:auto;
+  }
+  .dockbtn{
+    flex:1 0 64px;min-width:64px;border:none;border-radius:18px;padding:8px 4px;
+    background:var(--cream);font-weight:700;font-size:11px;color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;
+    transition:transform .1s,background .2s;
+  }
+  .dockbtn .e{font-size:22px;}
+  .dockbtn:active{transform:scale(.9);}
+  .dockbtn.on{background:linear-gradient(135deg,var(--pink),var(--purple));color:#fff;}
+
+  /* ---------- Panels ---------- */
+  .panel{
+    position:absolute;left:0;right:0;bottom:0;max-height:62%;
+    background:#fff;border-radius:24px 24px 0 0;box-shadow:0 -8px 30px rgba(90,40,90,.25);
+    transform:translateY(110%);transition:transform .3s cubic-bezier(.2,.8,.2,1);
+    z-index:40;display:flex;flex-direction:column;
+  }
+  .panel.open{transform:translateY(0);}
+  .panelHead{display:flex;align-items:center;padding:12px 16px 6px;}
+  .panelHead h2{margin:0;font-size:16px;flex:1;}
+  .grabber{width:44px;height:5px;border-radius:5px;background:#e6dced;margin:8px auto 0;}
+  .swatches,.items{display:flex;flex-wrap:wrap;gap:10px;padding:10px 16px 18px;overflow:auto;}
+  .swatch{width:46px;height:46px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.18);cursor:pointer;transition:transform .1s;}
+  .swatch:active{transform:scale(.85);}
+  .swatch.sel{border-color:var(--ink);transform:scale(1.08);}
+  .opt{
+    min-width:60px;height:60px;border-radius:16px;background:var(--cream);
+    display:flex;align-items:center;justify-content:center;font-size:30px;cursor:pointer;
+    border:3px solid transparent;transition:transform .1s;
+  }
+  .opt:active{transform:scale(.88);}
+  .opt.sel{border-color:var(--pink2);background:#ffe9f2;}
+  .seg{display:flex;gap:6px;padding:4px 16px 0;flex-wrap:wrap;}
+  .segbtn{border:none;background:var(--cream);border-radius:14px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer;color:var(--ink);}
+  .segbtn.on{background:var(--purple);color:#fff;}
+
+  /* ---------- Tray of placeable items ---------- */
+  .trayItem{font-size:30px;width:54px;height:54px;display:flex;align-items:center;justify-content:center;background:var(--cream);border-radius:14px;cursor:pointer;}
+  .trayItem:active{transform:scale(.88);}
+
+  /* speech bubble */
+  #speech{position:absolute;background:#fff;border-radius:16px;padding:8px 12px;font-weight:700;font-size:14px;box-shadow:var(--shadow);display:none;z-index:70;max-width:60%;}
+  #speech:after{content:"";position:absolute;bottom:-8px;left:24px;border:8px solid transparent;border-top-color:#fff;border-bottom:0;}
+
+  /* sparkle */
+  .spark{position:absolute;font-size:22px;pointer-events:none;animation:sp .8s ease-out forwards;z-index:80;}
+  @keyframes sp{0%{transform:scale(.4) translateY(0);opacity:1}100%{transform:scale(1.4) translateY(-40px);opacity:0}}
+
+  /* toast */
+  #toast{position:absolute;top:64px;left:50%;transform:translateX(-50%) translateY(-20px);
+    background:var(--ink);color:#fff;padding:8px 16px;border-radius:20px;font-weight:700;font-size:13px;
+    opacity:0;transition:.3s;z-index:90;pointer-events:none;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* intro */
+  #intro{position:absolute;inset:0;z-index:100;background:linear-gradient(160deg,var(--pink),var(--purple));
+    display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;gap:18px;}
+  #intro h1{font-size:34px;margin:0;text-shadow:0 3px 0 rgba(0,0,0,.15);}
+  #intro p{margin:0;opacity:.9;font-size:15px;}
+  #playBtn{margin-top:8px;border:none;border-radius:30px;padding:14px 40px;font-size:18px;font-weight:800;
+    background:#fff;color:var(--pink2);box-shadow:var(--shadow);cursor:pointer;animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  .introChar{font-size:90px;animation:bob 2s ease-in-out infinite;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <button class="iconbtn" id="homeBtn" title="World map">🗺️</button>
+    <h1>Tiny World</h1>
+    <div class="pill" id="coinPill">⭐ <span id="coins">0</span></div>
+    <button class="iconbtn" id="resetBtn" title="Reset">🔄</button>
+  </div>
+
+  <div id="stage">
+    <!-- WORLD MAP -->
+    <div class="scene active" id="map">
+      <div id="mapInner"></div>
+    </div>
+
+    <!-- ROOM SCENE (single, content swapped) -->
+    <div class="scene" id="roomScene">
+      <div class="room" id="room">
+        <div class="roomFloor" id="roomFloor"></div>
+        <!-- character + furniture injected here -->
+      </div>
+      <div id="speech"></div>
+    </div>
+
+    <!-- Panels -->
+    <div class="panel" id="stylePanel">
+      <div class="grabber"></div>
+      <div class="panelHead"><h2>👗 Dress Up</h2><button class="iconbtn" data-close style="background:#f0e8f5;color:#888">✕</button></div>
+      <div class="seg" id="styleSeg"></div>
+      <div class="items" id="styleItems"></div>
+      <div class="swatches" id="styleColors"></div>
+    </div>
+
+    <div class="panel" id="buildPanel">
+      <div class="grabber"></div>
+      <div class="panelHead"><h2>🧸 Add Things</h2><button class="iconbtn" data-close style="background:#f0e8f5;color:#888">✕</button></div>
+      <div class="items" id="buildItems"></div>
+    </div>
+
+    <div id="toast"></div>
+  </div>
+
+  <div id="dock">
+    <button class="dockbtn" data-act="map"><span class="e">🗺️</span>World</button>
+    <button class="dockbtn" data-act="style"><span class="e">👗</span>Dress</button>
+    <button class="dockbtn" data-act="build"><span class="e">🧸</span>Build</button>
+    <button class="dockbtn" data-act="talk"><span class="e">💬</span>Talk</button>
+    <button class="dockbtn" data-act="food"><span class="e">🍔</span>Feed</button>
+    <button class="dockbtn" data-act="photo"><span class="e">📸</span>Photo</button>
+  </div>
+</div>
+
+<!-- INTRO -->
+<div id="intro">
+  <div class="introChar">🧒</div>
+  <h1>Tiny World</h1>
+  <p>Dress up your character, explore places,<br>and make the world your own!</p>
+  <button id="playBtn">▶ Play</button>
+  <p style="font-size:12px;opacity:.7;margin-top:4px">Tip: drag your character & furniture anywhere</p>
+</div>
+
+<script>
+"use strict";
+(function(){
+  // ---------- State ----------
+  const SAVE_KEY = "tinyWorld.v1";
+  const defaultState = () => ({
+    coins: 5,
+    look: {
+      skin:"#f6c89f", hair:"#3a2a44", hairStyle:0, shirt:"#ff7eb3",
+      pants:"#5ec8ff", face:0, hat:-1, accessory:-1
+    },
+    rooms: {}      // roomId -> [{e,x,y}]
+  });
+  let state = load();
+
+  function load(){
+    try{ const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if(s&&s.look) return s; }catch(e){}
+    return defaultState();
+  }
+  function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }catch(e){} }
+
+  // ---------- Data ----------
+  const PLACES = [
+    {id:"home",   name:"Cozy House", emoji:"🏠", bg:["#ffe0ec","#ffc2da"], floor:"#caa472", x:14, y:12},
+    {id:"park",   name:"Sunny Park", emoji:"🌳", bg:["#cdeaff","#bdf0c9"], floor:"#8fd98f", x:58, y:8},
+    {id:"shop",   name:"Sweet Shop", emoji:"🍩", bg:["#fff0d6","#ffe0a8"], floor:"#e8b87a", x:32, y:40},
+    {id:"beach",  name:"Splashy Beach", emoji:"🏖️", bg:["#bff0ff","#ffe9b0"], floor:"#f5dca0", x:66, y:44},
+    {id:"space",  name:"Star Cafe", emoji:"🚀", bg:["#2a1a55","#5b3fa8"], floor:"#3a2a66", x:20, y:70},
+    {id:"salon",  name:"Hair Salon", emoji:"💇", bg:["#ffe3f1","#e9d4ff"], floor:"#d6a6c8", x:60, y:74}
+  ];
+
+  // Furniture available per nothing-specific; shared catalog
+  const BUILD_ITEMS = ["🛋️","🪑","🛏️","🪴","📺","🧸","🎈","🖼️","🕯️","🍰","🧁","🍕","🍦","⚽","🎸","📚","🪀","🛁","🚽","🌈","⭐","🎂","🍩","🐱","🐶","🐰","🌻","💐","🎁","🧃"];
+
+  const HAIR_STYLES = ["short","long","puff","spiky","bun"];
+  const FACES = ["😊","😄","😎","🥰","😜","😴","🤩","😇"];
+  const HATS = ["none","🎩","👑","🧢","🎀","🪖","🍄"];
+  const ACCESSORIES = ["none","👓","🕶️","🦋","⭐","🌸","❤️"];
+
+  const SKIN_COLORS = ["#ffe0bd","#f6c89f","#e8b07d","#c68642","#8d5524","#5c3a21"];
+  const HAIR_COLORS = ["#3a2a44","#6b3e26","#caa472","#ffce54","#ff7eb3","#9d7bff","#5ec8ff","#7ee08e","#ff5252","#ffffff"];
+  const CLOTH_COLORS = ["#ff7eb3","#ff65a3","#9d7bff","#5ec8ff","#7ee08e","#ffd166","#ff8c42","#ffffff","#3a2a44","#ff5252"];
+
+  const TALK_LINES = ["Hi there! 👋","Let's play! 🎉","I love this place!","Wheee! 🎈","Wanna explore?","I'm so happy! 🥰","La la la~ 🎵","Look at me! ✨","Best day ever!","Yummy! 😋","Let's dress up!","Adventure time! 🚀"];
+  const FOODS = ["🍔","🍕","🍦","🍩","🍰","🧁","🍓","🍪","🥤","🍌","🍇","🌭"];
+
+  // ---------- DOM ----------
+  const $ = s => document.querySelector(s);
+  const stage = $("#stage");
+  const mapInner = $("#mapInner");
+  const room = $("#room");
+  const roomFloor = $("#roomFloor");
+  const roomScene = $("#roomScene");
+  const mapScene = $("#map");
+  const speech = $("#speech");
+  const coinsEl = $("#coins");
+  let currentRoom = null;
+  let charWrap = null;
+
+  // ---------- Build world map ----------
+  function buildMap(){
+    mapInner.innerHTML = "";
+    // clouds
+    for(let i=0;i<5;i++){
+      const c=document.createElement("div"); c.className="cloud";
+      const w=50+Math.random()*60;
+      c.style.width=w+"px"; c.style.height=(w*0.5)+"px";
+      c.style.left=(Math.random()*80)+"%"; c.style.top=(Math.random()*70)+"%";
+      c.style.animationDelay=(Math.random()*4)+"s";
+      mapInner.appendChild(c);
+    }
+    PLACES.forEach(p=>{
+      const el=document.createElement("div"); el.className="place";
+      el.style.left=p.x+"%"; el.style.top=p.y+"%";
+      el.innerHTML=`<div class="bubble" style="background:linear-gradient(135deg,${p.bg[0]},${p.bg[1]})">${p.emoji}</div><span class="label">${p.name}</span>`;
+      el.addEventListener("click",()=>enterRoom(p.id));
+      mapInner.appendChild(el);
+    });
+  }
+
+  // ---------- Character SVG ----------
+  function charSVG(look){
+    const hair = HAIR_COLORS[0]; // unused fallback
+    const hairPaths = {
+      0:`<path d="M50 38 Q50 8 90 18 Q130 8 130 40 L130 50 Q120 30 90 30 Q60 30 50 50 Z" fill="${look.hair}"/>`,
+      1:`<path d="M44 40 Q46 6 90 12 Q136 6 138 44 L140 120 Q132 110 132 70 Q120 32 90 30 Q60 32 50 70 Q50 110 42 120 Z" fill="${look.hair}"/>`,
+      2:`<ellipse cx="90" cy="30" rx="50" ry="32" fill="${look.hair}"/><circle cx="55" cy="34" r="16" fill="${look.hair}"/><circle cx="125" cy="34" r="16" fill="${look.hair}"/>`,
+      3:`<path d="M50 46 L58 14 L70 40 L82 10 L92 40 L104 12 L114 42 L128 18 L132 50 Q120 30 90 30 Q60 30 50 50 Z" fill="${look.hair}"/>`,
+      4:`<circle cx="90" cy="14" r="16" fill="${look.hair}"/><path d="M52 44 Q52 18 90 18 Q128 18 128 46 Q118 30 90 30 Q62 30 52 48 Z" fill="${look.hair}"/>`
+    };
+    const hatTop = look.hat>0 ? `<text x="90" y="6" font-size="40" text-anchor="middle">${HATS[look.hat]}</text>` : "";
+    const accTxt = look.accessory>0 ? `<text x="90" y="62" font-size="26" text-anchor="middle">${ACCESSORIES[look.accessory]}</text>` : "";
+    return `
+    <svg class="char" viewBox="0 0 180 250">
+      <!-- legs -->
+      <rect x="74" y="186" width="14" height="46" rx="7" fill="${look.skin}"/>
+      <rect x="92" y="186" width="14" height="46" rx="7" fill="${look.skin}"/>
+      <ellipse cx="81" cy="236" rx="12" ry="7" fill="#3a2a44"/>
+      <ellipse cx="99" cy="236" rx="12" ry="7" fill="#3a2a44"/>
+      <!-- pants -->
+      <rect x="68" y="150" width="44" height="48" rx="12" fill="${look.pants}"/>
+      <!-- body/shirt -->
+      <rect x="60" y="96" width="60" height="70" rx="22" fill="${look.shirt}"/>
+      <!-- arms -->
+      <rect x="44" y="100" width="16" height="60" rx="8" fill="${look.shirt}"/>
+      <rect x="120" y="100" width="16" height="60" rx="8" fill="${look.shirt}"/>
+      <circle cx="52" cy="162" r="9" fill="${look.skin}"/>
+      <circle cx="128" cy="162" r="9" fill="${look.skin}"/>
+      <!-- neck -->
+      <rect x="82" y="84" width="16" height="20" fill="${look.skin}"/>
+      <!-- head -->
+      <circle cx="90" cy="58" r="38" fill="${look.skin}"/>
+      ${accTxt}
+      <!-- face -->
+      <text x="90" y="72" font-size="40" text-anchor="middle">${FACES[look.face]}</text>
+      <!-- hair -->
+      ${hairPaths[look.hairStyle]||hairPaths[0]}
+      ${hatTop}
+    </svg>`;
+  }
+
+  function makeChar(){
+    const w=document.createElement("div");
+    w.className="charWrap bounce";
+    w.innerHTML=charSVG(state.look);
+    enableDrag(w, ()=>{ /* persist char pos per room optional */ });
+    w.addEventListener("click",(e)=>{ if(!w._moved){ say(rand(TALK_LINES)); sparkleAt(e); } });
+    return w;
+  }
+  function refreshChar(){
+    if(charWrap) charWrap.innerHTML = charSVG(state.look);
+  }
+
+  // ---------- Enter room ----------
+  function enterRoom(id){
+    const p = PLACES.find(x=>x.id===id);
+    currentRoom = id;
+    room.style.background = `linear-gradient(180deg,${p.bg[0]},${p.bg[1]} 62%)`;
+    roomFloor.style.background = p.floor;
+    roomFloor.style.boxShadow = "inset 0 8px 14px rgba(0,0,0,.08)";
+    // clear furniture & char
+    [...room.querySelectorAll(".furni,.charWrap")].forEach(n=>n.remove());
+    // load saved furniture
+    (state.rooms[id]||[]).forEach(f=>spawnFurni(f.e,f.x,f.y,false));
+    // add character
+    charWrap = makeChar();
+    room.appendChild(charWrap);
+    showScene("room");
+    toast("Welcome to "+p.name+" "+p.emoji);
+  }
+
+  function showScene(which){
+    if(which==="map"){ mapScene.classList.add("active"); roomScene.classList.remove("active"); currentRoom=null; }
+    else { roomScene.classList.add("active"); mapScene.classList.remove("active"); }
+    closePanels();
+  }
+
+  // ---------- Furniture ----------
+  function spawnFurni(emoji,x,y,isNew){
+    const el=document.createElement("div");
+    el.className="furni"; el.textContent=emoji;
+    el.style.left=x+"px"; el.style.top=y+"px";
+    enableDrag(el, saveRoom);
+    el.addEventListener("dblclick",()=>{ el.remove(); saveRoom(); });
+    // long-press to delete
+    let lp;
+    el.addEventListener("touchstart",()=>{ lp=setTimeout(()=>{ if(confirmDelete()){el.remove();saveRoom();} },650); },{passive:true});
+    el.addEventListener("touchend",()=>clearTimeout(lp));
+    el.addEventListener("touchmove",()=>clearTimeout(lp));
+    room.appendChild(el);
+    if(isNew){ saveRoom(); }
+    return el;
+  }
+  function confirmDelete(){ return true; } // tap-hold removes; kept simple/kid-friendly
+  function saveRoom(){
+    if(!currentRoom) return;
+    state.rooms[currentRoom] = [...room.querySelectorAll(".furni")].map(f=>({
+      e:f.textContent, x:parseFloat(f.style.left), y:parseFloat(f.style.top)
+    }));
+    save();
+  }
+
+  // ---------- Drag (touch + mouse) ----------
+  function enableDrag(el, onEnd){
+    let sx,sy,ox,oy,active=false;
+    el._moved=false;
+    const start=(cx,cy)=>{
+      active=true; el._moved=false;
+      const r=el.getBoundingClientRect(), pr=el.offsetParent.getBoundingClientRect();
+      ox=r.left-pr.left; oy=r.top-pr.top; sx=cx; sy=cy;
+      el.classList.add("dragging"); el.classList.remove("bounce");
+    };
+    const move=(cx,cy)=>{
+      if(!active) return;
+      const dx=cx-sx, dy=cy-sy;
+      if(Math.abs(dx)>3||Math.abs(dy)>3) el._moved=true;
+      let nx=ox+dx, ny=oy+dy;
+      const par=el.offsetParent;
+      nx=Math.max(-10,Math.min(nx,par.clientWidth-el.offsetWidth+10));
+      ny=Math.max(0,Math.min(ny,par.clientHeight-el.offsetHeight));
+      el.style.left=nx+"px"; el.style.top=ny+"px";
+    };
+    const end=()=>{
+      if(!active) return; active=false;
+      el.classList.remove("dragging");
+      if(el.classList.contains("charWrap")) el.classList.add("bounce");
+      if(el._moved && onEnd) onEnd();
+    };
+    el.addEventListener("touchstart",e=>{ const t=e.touches[0]; start(t.clientX,t.clientY); },{passive:true});
+    el.addEventListener("touchmove",e=>{ const t=e.touches[0]; move(t.clientX,t.clientY); e.preventDefault(); },{passive:false});
+    el.addEventListener("touchend",end);
+    el.addEventListener("mousedown",e=>{ start(e.clientX,e.clientY);
+      const mm=ev=>move(ev.clientX,ev.clientY), mu=()=>{ end(); document.removeEventListener("mousemove",mm); document.removeEventListener("mouseup",mu); };
+      document.addEventListener("mousemove",mm); document.addEventListener("mouseup",mu);
+    });
+  }
+
+  // ---------- Panels ----------
+  const stylePanel=$("#stylePanel"), buildPanel=$("#buildPanel");
+  function closePanels(){ stylePanel.classList.remove("open"); buildPanel.classList.remove("open"); setDock(null); }
+  document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closePanels));
+
+  // ---------- Dress up panel ----------
+  let styleTab = "hair";
+  const STYLE_TABS = [
+    {id:"skin",  label:"Skin"},
+    {id:"hair",  label:"Hair"},
+    {id:"face",  label:"Face"},
+    {id:"shirt", label:"Top"},
+    {id:"pants", label:"Bottom"},
+    {id:"hat",   label:"Hat"},
+    {id:"acc",   label:"Extras"}
+  ];
+  function buildStyleSeg(){
+    const seg=$("#styleSeg"); seg.innerHTML="";
+    STYLE_TABS.forEach(t=>{
+      const b=document.createElement("button"); b.className="segbtn"+(t.id===styleTab?" on":"");
+      b.textContent=t.label; b.onclick=()=>{ styleTab=t.id; buildStyleSeg(); renderStyleItems(); };
+      seg.appendChild(b);
+    });
+  }
+  function renderStyleItems(){
+    const items=$("#styleItems"), colors=$("#styleColors");
+    items.innerHTML=""; colors.innerHTML="";
+    const addColors=(arr,key)=>{
+      arr.forEach(c=>{
+        const s=document.createElement("div"); s.className="swatch"+(state.look[key]===c?" sel":"");
+        s.style.background=c; s.onclick=()=>{ state.look[key]=c; refreshChar(); save(); renderStyleItems(); };
+        colors.appendChild(s);
+      });
+    };
+    const addOpts=(arr,key,offset=0)=>{
+      arr.forEach((em,i)=>{
+        const idx=i+offset;
+        const o=document.createElement("div"); o.className="opt"+(state.look[key]===idx?" sel":"");
+        o.textContent= em==="none" ? "🚫" : em;
+        o.onclick=()=>{ state.look[key]=idx; refreshChar(); save(); renderStyleItems(); };
+        items.appendChild(o);
+      });
+    };
+    switch(styleTab){
+      case "skin": addColors(SKIN_COLORS,"skin"); break;
+      case "hair":
+        HAIR_STYLES.forEach((h,i)=>{
+          const o=document.createElement("div"); o.className="opt"+(state.look.hairStyle===i?" sel":"");
+          o.textContent=["💇","👩‍🦰","🎀","⚡","🧑‍🦱"][i];
+          o.onclick=()=>{ state.look.hairStyle=i; refreshChar(); save(); renderStyleItems(); };
+          items.appendChild(o);
+        });
+        addColors(HAIR_COLORS,"hair"); break;
+      case "face": addOpts(FACES,"face"); break;
+      case "shirt": addColors(CLOTH_COLORS,"shirt"); break;
+      case "pants": addColors(CLOTH_COLORS,"pants"); break;
+      case "hat": addOpts(HATS,"hat",0); break;
+      case "acc": addOpts(ACCESSORIES,"accessory",0); break;
+    }
+  }
+  function openStyle(){
+    if(!currentRoom){ toast("Pick a place first! 🗺️"); return; }
+    buildStyleSeg(); renderStyleItems();
+    buildPanel.classList.remove("open"); stylePanel.classList.add("open"); setDock("style");
+  }
+
+  // ---------- Build panel ----------
+  function renderBuild(){
+    const c=$("#buildItems"); c.innerHTML="";
+    BUILD_ITEMS.forEach(em=>{
+      const o=document.createElement("div"); o.className="trayItem"; o.textContent=em;
+      o.onclick=()=>{
+        const x=room.clientWidth/2-26+(Math.random()*60-30);
+        const y=room.clientHeight*0.45+(Math.random()*40-20);
+        spawnFurni(em,x,y,true);
+        toast("Added "+em+" — drag it!");
+      };
+      c.appendChild(o);
+    });
+  }
+  function openBuild(){
+    if(!currentRoom){ toast("Pick a place first! 🗺️"); return; }
+    renderBuild();
+    stylePanel.classList.remove("open"); buildPanel.classList.add("open"); setDock("build");
+  }
+
+  // ---------- Talk / Feed / Photo ----------
+  function say(txt){
+    if(!charWrap) return;
+    const r=charWrap.getBoundingClientRect(), s=stage.getBoundingClientRect();
+    speech.textContent=txt;
+    speech.style.display="block";
+    speech.style.left=Math.min(Math.max(r.left-s.left-10,8), s.width-speech.offsetWidth-8)+"px";
+    speech.style.top=(r.top-s.top-46)+"px";
+    clearTimeout(say._t); say._t=setTimeout(()=>speech.style.display="none",1800);
+    addCoins(1);
+  }
+  function feed(){
+    if(!currentRoom){ toast("Pick a place first! 🍔"); return; }
+    const food=rand(FOODS);
+    say("Mmm "+food+" yummy!");
+    // floating food
+    const r=charWrap.getBoundingClientRect(), s=stage.getBoundingClientRect();
+    const f=document.createElement("div"); f.className="spark"; f.textContent=food;
+    f.style.left=(r.left-s.left+60)+"px"; f.style.top=(r.top-s.top+30)+"px";
+    stage.appendChild(f); setTimeout(()=>f.remove(),800);
+  }
+  function photo(){
+    if(!currentRoom){ toast("Explore a place to snap a photo! 📸"); return; }
+    // flash
+    const fl=document.createElement("div");
+    fl.style.cssText="position:absolute;inset:0;background:#fff;z-index:85;opacity:.9;transition:opacity .5s;pointer-events:none";
+    stage.appendChild(fl);
+    requestAnimationFrame(()=>{ fl.style.opacity="0"; });
+    setTimeout(()=>fl.remove(),520);
+    say("Cheese! 📸✨"); addCoins(2);
+    toast("📸 Snap! Looking great!");
+  }
+
+  // ---------- Coins / FX ----------
+  function addCoins(n){ state.coins+=n; coinsEl.textContent=state.coins; save(); bumpCoin(); }
+  function bumpCoin(){ const p=$("#coinPill"); p.style.transform="scale(1.18)"; setTimeout(()=>p.style.transform="",150); }
+  function sparkleAt(e){
+    const s=stage.getBoundingClientRect();
+    const cx=(e.touches?e.touches[0].clientX:e.clientX)-s.left;
+    const cy=(e.touches?e.touches[0].clientY:e.clientY)-s.top;
+    for(let i=0;i<5;i++){
+      const sp=document.createElement("div"); sp.className="spark"; sp.textContent=rand(["✨","⭐","💫","🌟","💖"]);
+      sp.style.left=(cx+(Math.random()*40-20))+"px"; sp.style.top=(cy+(Math.random()*20-10))+"px";
+      stage.appendChild(sp); setTimeout(()=>sp.remove(),820);
+    }
+  }
+  let toastT;
+  function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),1600); }
+  const rand = a => a[Math.floor(Math.random()*a.length)];
+
+  // ---------- Dock ----------
+  function setDock(act){
+    document.querySelectorAll(".dockbtn").forEach(b=>b.classList.toggle("on", b.dataset.act===act));
+  }
+  document.querySelectorAll(".dockbtn").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const a=b.dataset.act;
+      if(a==="map"){ showScene("map"); }
+      else if(a==="style"){ stylePanel.classList.contains("open")?closePanels():openStyle(); }
+      else if(a==="build"){ buildPanel.classList.contains("open")?closePanels():openBuild(); }
+      else if(a==="talk"){ if(currentRoom){say(rand(TALK_LINES));} else toast("Pick a place to chat! 💬"); }
+      else if(a==="food"){ feed(); }
+      else if(a==="photo"){ photo(); }
+    });
+  });
+
+  $("#homeBtn").addEventListener("click",()=>showScene("map"));
+  $("#resetBtn").addEventListener("click",()=>{
+    if(confirm("Start over? This clears your character and rooms.")){
+      state=defaultState(); save(); coinsEl.textContent=state.coins;
+      [...room.querySelectorAll(".furni,.charWrap")].forEach(n=>n.remove());
+      showScene("map"); toast("Fresh start! ✨");
+    }
+  });
+
+  // ---------- Intro ----------
+  $("#playBtn").addEventListener("click",()=>{
+    const intro=$("#intro");
+    intro.style.transition="opacity .4s"; intro.style.opacity="0";
+    setTimeout(()=>intro.remove(),420);
+  });
+
+  // ---------- Init ----------
+  function init(){
+    coinsEl.textContent=state.coins;
+    buildMap();
+    showScene("map");
+  }
+  init();
+})();
+</script>
+</body>
+</html>
